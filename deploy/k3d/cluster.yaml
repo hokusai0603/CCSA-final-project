@@ -1,15 +1,40 @@
 # Local demo cluster: 1 server + 3 agents, each agent in its own simulated zone.
-# Create:  k3d cluster create --config deploy/k3d/cluster.yaml
+# Create with `make cluster-up` (runs preflight, starts the image cache, and
+# applies EXPOSE=1 if given). Plain `k3d cluster create --config` also works,
+# but only after the cache registry exists (scripts/cluster-up.sh creates it).
+# Host-safety choices are explained in docs/host-environment.md (R2, R5, R6).
 apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:
   name: drawguess
 servers: 1
 agents: 3
+# Pinned so kubectl (1.37) stays within the ±1 minor skew policy (R6).
+image: rancher/k3s:v1.37.2-k3s1
+kubeAPI:
+  host: 127.0.0.1          # R6: API is never exposed to the network
+  hostIP: 127.0.0.1
+  hostPort: "6550"         # stable port; the host may already use 6443
 ports:
-  - port: 8080:80          # http://localhost:8080 -> Traefik ingress
+  # R5: loopback only by default; `make cluster-up EXPOSE=1` rewrites these
+  # to 0.0.0.0 so phones on the LAN can join the live demo.
+  # R6: never map host 80/443.
+  - port: 127.0.0.1:8080:80     # http://localhost:8080  -> Traefik
     nodeFilters:
       - loadbalancer
+  - port: 127.0.0.1:8443:443    # https://localhost:8443 -> Traefik (TLS)
+    nodeFilters:
+      - loadbalancer
+registries:
+  # R2: pull-through cache for Docker Hub, created and kept by cluster-up.sh
+  # (it survives cluster-down, so recreated clusters do not pull again).
+  use:
+    - k3d-drawguess-cache:5000
+  config: |
+    mirrors:
+      "docker.io":
+        endpoint:
+          - http://k3d-drawguess-cache:5000
 options:
   k3s:
     nodeLabels:
@@ -22,3 +47,6 @@ options:
       - label: topology.kubernetes.io/zone=zone-c
         nodeFilters:
           - agent:2
+  kubeconfig:
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true

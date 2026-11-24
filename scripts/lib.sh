@@ -16,6 +16,15 @@ CLUSTER_NAME="${CLUSTER_NAME:-drawguess}"
 KUBE_CONTEXT="k3d-${CLUSTER_NAME}"
 export CLUSTER_NAME KUBE_CONTEXT
 
+# Docker Hub pull-through cache shared by every recreated cluster (R2).
+# k3d prefixes registry names with "k3d-"; cluster.yaml refers to the container name.
+CACHE_NAME="${CLUSTER_NAME}-cache"
+CACHE_CONTAINER="k3d-${CACHE_NAME}"
+CACHE_PORT="${CACHE_PORT:-5005}"
+CACHE_VOLUME="${CLUSTER_NAME}-registry-cache"
+CACHE_IMAGE="registry:2.8.3"
+export CACHE_NAME CACHE_CONTAINER CACHE_PORT CACHE_VOLUME CACHE_IMAGE
+
 if [[ -t 2 ]]; then
   _c_red=$'\e[31m' _c_yel=$'\e[33m' _c_grn=$'\e[32m' _c_off=$'\e[0m'
 else

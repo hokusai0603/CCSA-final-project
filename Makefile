@@ -6,9 +6,10 @@ SHELL := /usr/bin/env bash
 
 ENV     ?= dev
 PLAYERS ?= 200
+EXPOSE  ?= 0
 
 .PHONY: help preflight preflight-measure host-sysctl \
-        cluster-up cluster-down build deploy monitoring keda test loadtest \
+        cluster-up cluster-down cache-down build deploy monitoring keda test loadtest \
         demo-1 demo-2 demo-3 demo-4 demo-5 demo-6 demo-7 demo-8 demo-9
 
 help: ## List all targets
@@ -16,7 +17,7 @@ help: ## List all targets
 	     /^##@ / { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } \
 	     /^[a-zA-Z0-9_-]+:.*## / { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 	@echo
-	@echo "  Variables: ENV=$(ENV) (dev|prod)  PLAYERS=$(PLAYERS)"
+	@echo "  Variables: ENV=$(ENV) (dev|prod)  PLAYERS=$(PLAYERS)  EXPOSE=$(EXPOSE) (0|1)"
 
 ##@ Host
 preflight: ## Check tools, host limits, ports and image-pull quota (docs/host-environment.md)
@@ -29,11 +30,14 @@ host-sysctl: ## Raise inotify limits for k3d (asks for sudo; once per host)
 	sudo scripts/host-sysctl.sh
 
 ##@ Cluster
-cluster-up: ## Create the k3d cluster from deploy/k3d/cluster.yaml
-	@scripts/cluster-up.sh
+cluster-up: ## Create the k3d cluster (EXPOSE=1 binds ingress on 0.0.0.0 for the live demo)
+	@EXPOSE=$(EXPOSE) scripts/cluster-up.sh
 
-cluster-down: ## Delete the k3d cluster
+cluster-down: ## Delete the k3d cluster (keeps the image cache)
 	@scripts/cluster-down.sh
+
+cache-down: ## Remove the Docker Hub pull-through cache and its volume
+	@scripts/cache-down.sh
 
 build: ## Build all images (tag = short git SHA) and import them into k3d
 	@scripts/build.sh

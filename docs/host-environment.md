@@ -29,8 +29,10 @@ Run `make preflight` before `make cluster-up`, and `make preflight-measure` befo
 
 **Impact.** `ImagePullBackOff` during "fresh cluster" verification, and in the worst case during live demo 1.
 
+Images from Docker Verified Publishers / sponsored open-source projects (e.g. `rancher/*`, which k3s uses for its add-ons) are exempt; library and community images (`node`, `nginx`, `python`, `redis`, `postgres`, `grafana/*`) count.
+
 **Mitigation.**
-- P0-2: `cluster-up` configures a registry mirror (pull-through cache) so recreated clusters do not hit Docker Hub again.
+- P0-2 (done): `cluster-up` starts `k3d-drawguess-cache`, a pull-through cache for `docker.io` on `127.0.0.1:5005`, and every node mirrors `docker.io` through it. The cache survives `cluster-down`; `make cache-down` removes it. Measured: a recreated cluster pulled 241 KB from upstream instead of 407 MB. Optional `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` (environment only, never committed) make the cache pull authenticated.
 - P3-4: before the demo, preload all images into the nodes; optionally `docker login` for a higher quota.
 - `preflight` prints the remaining quota (HEAD requests do not consume it).
 

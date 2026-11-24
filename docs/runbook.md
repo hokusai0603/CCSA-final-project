@@ -15,8 +15,13 @@ Operational procedures. Agents and team members: keep each entry accurate as fea
 
 ## `ImagePullBackOff` with `429 Too Many Requests` (R2)
 - **Check:** `kubectl describe pod` events; `make preflight` prints the remaining Docker Hub quota for this IP.
-- **Fix:** wait for the hourly window, use the registry mirror from `cluster-up`, or `docker login`; avoid repeated `cluster-down`/`cluster-up` cycles.
-- **Verify:** pods pull and become Ready.
+- **Fix:** check the cache is running (`docker ps --filter name=k3d-drawguess-cache`, `curl http://127.0.0.1:5005/v2/_catalog`); start it with `make cluster-up` (it re-creates a missing cache); wait for the hourly window or export `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN`, then `make cluster-down cache-down cluster-up`.
+- **Verify:** pods pull and become Ready; the image shows up in the cache catalog.
+
+## Recreate the cluster / reclaim disk
+- `make cluster-down cluster-up`: fresh cluster in about 45 s; images come from the cache.
+- `make cluster-down cache-down`: also deletes the image cache (next `cluster-up` pulls everything from Docker Hub again).
+- Never use `docker system prune` or other global cleanup on the shared host (AGENTS.md rule 12).
 
 ## AI unavailable (`AIUnavailable` alert / banner shown to players)
 - **Check:** `kubectl -n <ns> get pods -l app=ai-inference`; `kubectl -n <ns> logs -l app=ai-inference --tail=100`; Grafana panel "AI circuit".

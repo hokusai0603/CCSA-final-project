@@ -84,7 +84,8 @@ Agents should create and keep these Makefile targets working. Their implementati
 | `make help` | List all targets |
 | `make preflight` / `make preflight-measure` | Host checks R1–R6; the `-measure` variant fails on other heavy workloads (run before recording numbers) |
 | `make host-sysctl` | Raise inotify limits (sudo, once per host) |
-| `make cluster-up` / `make cluster-down` | Create / delete the k3d cluster from `deploy/k3d/cluster.yaml` |
+| `make cluster-up` / `make cluster-down` | Create / delete the k3d cluster from `deploy/k3d/cluster.yaml`; `EXPOSE=1` binds the ingress on `0.0.0.0` (live demo only) |
+| `make cache-down` | Remove the Docker Hub pull-through cache (kept across `cluster-down` on purpose) |
 | `make build` | Build all images tagged with the short git SHA and import them into k3d |
 | `make deploy ENV=dev` | `helm upgrade --install` the chart with `values-$(ENV).yaml` |
 | `make monitoring` | Install kube-prometheus-stack + dashboards |

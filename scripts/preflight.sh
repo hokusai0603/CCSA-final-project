@@ -143,6 +143,13 @@ else
     if port_in_use "$port"; then f "port $port already in use (needed by the k3d cluster)"; else ok "port $port free"; fi
   done
 fi
+if docker container inspect "$CACHE_CONTAINER" >/dev/null 2>&1; then
+  ok "image cache $CACHE_CONTAINER exists (port $CACHE_PORT is ours)"
+elif port_in_use "$CACHE_PORT"; then
+  f "port $CACHE_PORT already in use (needed by the image cache; override with CACHE_PORT=...)"
+else
+  ok "port $CACHE_PORT free (image cache)"
+fi
 for port in 80 443 6443; do
   if port_in_use "$port"; then
     info "     note: host port $port is taken (e.g. a host-level k3s): never map it in deploy/k3d/cluster.yaml"

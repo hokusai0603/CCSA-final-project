@@ -27,7 +27,7 @@ Cross-cutting items are tagged inside the tasks that own them:
   - Done: stubs exit 2 and name the task that implements them. Also added `scripts/lib.sh` (root guard, `kc`/`hc` pinned to `k3d-drawguess`), `make preflight` / `preflight-measure` (checks for R1–R6, `docs/host-environment.md`), `make host-sysctl`, `.nvmrc` (Node 24).
   - Human note: on a new host run `make preflight` first; if inotify FAILs, run `make host-sysctl` (sudo).
 
-- [ ] **P0-2 Local cluster**
+- [x] **P0-2 Local cluster**
   - `scripts/cluster-up.sh` creates the cluster from `deploy/k3d/cluster.yaml`.
   - Host safeguards (`docs/host-environment.md`):
     - R6: API server on `127.0.0.1:6550`; TLS on 8443, never host 80/443/6443.
@@ -36,6 +36,8 @@ Cross-cutting items are tagged inside the tasks that own them:
     - R2: configure a registry mirror (pull-through cache) via k3d `registries`, so recreated clusters do not pull from Docker Hub again.
     - `cluster-up` runs `scripts/preflight.sh` first and aborts on FAIL.
   - Acceptance: `kubectl get nodes -L topology.kubernetes.io/zone` shows 1 server + 3 agents with zones `zone-a/b/c`; `make cluster-down` removes it; `ss -ltn` shows 6550 and 8080 bound to 127.0.0.1 only; a second `cluster-down` / `cluster-up` cycle pulls system images from the mirror, not from Docker Hub.
+  - Done: k3s pinned to `v1.37.2-k3s1`; cache registry `k3d-drawguess-cache` (`registry:2.8.3`, `127.0.0.1:5005`, volume `drawguess-registry-cache`) is created by `cluster-up`, kept by `cluster-down`, removed by `make cache-down`. Measured: cycle 1 the cache received 407 MB from upstream; cycle 2 it received 241 KB while serving 132 blob requests (cache size unchanged at 190 MB). Cluster ready in ~45 s.
+  - Human note: the Docker Hub quota shown by `preflight` did not drop in cycle 1 because `rancher/*` images are exempt from the anonymous limit; application base images (node, nginx, python, redis, postgres) do count, and the cache absorbs them too. `EXPOSE=1` was verified reachable from the LAN address and unreachable again after recreating without it.
 
 - [ ] **P0-3 CI**
   - GitHub Actions workflow: lint + unit tests for each service, and `helm lint` + `helm template` for the chart.
