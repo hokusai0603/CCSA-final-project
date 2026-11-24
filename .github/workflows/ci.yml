@@ -37,6 +37,9 @@ jobs:
       - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.12"
+          cache-dependency-glob: "services/**/uv.lock"
+          # Until a Python service exists there is nothing to cache; don't fail on that.
+          ignore-nothing-to-cache: true
 
       - uses: azure/setup-helm@v5
         with:
