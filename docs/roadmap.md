@@ -6,13 +6,21 @@ Agents: take the first unchecked task whose dependencies are done. Each task lis
 
 ## Phase 0 — Repository foundation
 
-- [ ] **P0-1 Makefile & scripts skeleton**
+- [x] **P0-1 Makefile & scripts skeleton**
   - Create `Makefile` with the targets listed in `AGENTS.md` §6; each calls a script in `scripts/`.
   - Acceptance: `make help` lists all targets; unimplemented targets exit non-zero with a clear "not implemented yet" message.
+  - Done: stubs exit 2 and name the task that implements them. Also added `scripts/lib.sh` (root guard, `kc`/`hc` pinned to `k3d-drawguess`), `make preflight` / `preflight-measure` (checks for R1–R6, `docs/host-environment.md`), `make host-sysctl`, `.nvmrc` (Node 24).
+  - Human note: on a new host run `make preflight` first; if inotify FAILs, run `make host-sysctl` (sudo).
 
 - [ ] **P0-2 Local cluster**
   - `scripts/cluster-up.sh` creates the cluster from `deploy/k3d/cluster.yaml`.
-  - Acceptance: `kubectl get nodes -L topology.kubernetes.io/zone` shows 1 server + 3 agents with zones `zone-a/b/c`; `make cluster-down` removes it.
+  - Host safeguards (`docs/host-environment.md`):
+    - R6: API server on `127.0.0.1:6550`; TLS on 8443, never host 80/443/6443.
+    - R6: pin the k3s image in `cluster.yaml` to a version within ±1 minor of the documented kubectl (k3d's default k3s 1.35 vs kubectl 1.37 is out of skew policy).
+    - R5: ingress on `127.0.0.1:8080` by default; `make cluster-up EXPOSE=1` binds `0.0.0.0` for the live demo.
+    - R2: configure a registry mirror (pull-through cache) via k3d `registries`, so recreated clusters do not pull from Docker Hub again.
+    - `cluster-up` runs `scripts/preflight.sh` first and aborts on FAIL.
+  - Acceptance: `kubectl get nodes -L topology.kubernetes.io/zone` shows 1 server + 3 agents with zones `zone-a/b/c`; `make cluster-down` removes it; `ss -ltn` shows 6550 and 8080 bound to 127.0.0.1 only; a second `cluster-down` / `cluster-up` cycle pulls system images from the mirror, not from Docker Hub.
 
 - [ ] **P0-3 CI**
   - GitHub Actions workflow: lint + unit tests for each service, and `helm lint` + `helm template` for the chart.
@@ -27,10 +35,12 @@ Agents: take the first unchecked task whose dependencies are done. Each task lis
 - [ ] **P1-2 Game server core**
   - WebSocket server implementing the protocol in `architecture.md` §3; rooms, strokes with `seq`, round timer, scoring; Redis keys per §4.
   - Acceptance: unit tests for room logic and protocol validation; two `wscat` clients in one room see each other's strokes.
+  - R3: default local config uses Redis `16379` / PostgreSQL `15432` (never 6379/5432); test helpers use a unique key prefix and refuse to run against a non-empty Redis/database they did not create.
 
 - [ ] **P1-3 AI worker**
   - Consumer group on `ai:snapshots`, rasterize strokes, ONNX inference, publish `ai_guess`, `XACK`, clear `ai:pending:{room}`, refresh `ai:last_ok`.
   - Acceptance: with a fake stroke list for "cat" in Redis and an enqueued snapshot, an `ai_guess` containing `cat` in the top 3 is published within 1 s.
+  - R3: same port and test-isolation rules as P1-2.
 
 - [ ] **P1-4 Frontend**
   - Canvas drawing (mouse + touch), join by URL `?room=`, live strokes, AI guesses panel, timer, scores, banner for `ai_status`.
@@ -38,7 +48,8 @@ Agents: take the first unchecked task whose dependencies are done. Each task lis
 
 - [ ] **P1-5 Docker images & Compose**
   - Multi-stage, non-root Dockerfiles for all three services; `docker-compose.yml` with Redis + PostgreSQL.
-  - Acceptance: `docker compose up` gives a fully playable game at `http://localhost:8080`; `docker run --rm <image> id -u` is not 0 for every image.
+  - R3: Compose serves the game on **8081** (so it can run next to k3d on 8080) and does not publish Redis/PostgreSQL, or publishes them only as `127.0.0.1:16379` / `127.0.0.1:15432`.
+  - Acceptance: `docker compose up` gives a fully playable game at `http://localhost:8081`; `docker run --rm <image> id -u` is not 0 for every image.
 
 ## Phase 2 — Kubernetes
 
@@ -74,6 +85,7 @@ Agents: take the first unchecked task whose dependencies are done. Each task lis
 
 - [ ] **P3-1 Monitoring stack**
   - `make monitoring` installs kube-prometheus-stack; ServiceMonitors; Grafana dashboard JSON committed in `deploy/monitoring/dashboards/`.
+  - R5: Grafana admin password from a Secret (never the chart default `prom-operator`); Grafana not routed through the Ingress, reached via `kubectl port-forward` on `localhost:3001`. Scrape and rule-evaluation intervals ≤ 15 s (needed for demo 9's < 60 s alert target).
   - Acceptance: dashboard shows all metrics from `architecture.md` §8 with live data.
 
 - [ ] **P3-2 Alerts**
@@ -86,6 +98,8 @@ Agents: take the first unchecked task whose dependencies are done. Each task lis
 
 - [ ] **P3-4 Demo scripts**
   - `scripts/demo-1.sh` … `demo-9.sh` + `make demo-<n>`; each prints the measured numbers.
+  - R4: each script starts with `scripts/preflight.sh --measure` (aborts if other VMs or heavy jobs are running) and prints host load average next to its result; numbers in `goals.md` are the median of ≥ 3 runs.
+  - R2: `make preload` (or equivalent) pulls every image into the nodes ahead of the demo, so live demo 1 works without Docker Hub.
   - Acceptance: all 9 scenarios run end-to-end on a fresh cluster.
 
 - [ ] **P3-5 Results & runbook**

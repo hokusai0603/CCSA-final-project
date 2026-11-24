@@ -20,6 +20,7 @@ When a trade-off appears between "more game features" and "better operability / 
 | `docs/roadmap.md` | **The task list.** Pick tasks from here, in order |
 | `docs/decisions.md` | Architecture decisions and why. Do not contradict these silently |
 | `docs/runbook.md` | Operational procedures; keep it updated as features land |
+| `docs/host-environment.md` | Risks R1–R6 of running on a shared host, and which task mitigates each |
 
 ## 3. Fixed technology choices
 
@@ -70,13 +71,19 @@ These rules exist because the demo scenarios depend on them.
 7. **Configuration** via environment variables sourced from ConfigMap/Secret. Never commit real secrets; commit only `*.example` files.
 8. **Every Deployment** sets resource `requests` and `limits`, liveness/readiness probes, and `topologySpreadConstraints` on `topology.kubernetes.io/zone`.
 9. **Structured JSON logs** to stdout (one object per line, include `room` and `pod` fields where relevant).
+10. **Never use the default host ports for local development** (`docs/host-environment.md` R3): Redis `16379`, PostgreSQL `15432`, Grafana `3001`, Compose game `8081`. Tests never flush or drop data they did not create; they use a unique key prefix or database and refuse to run against a non-empty target.
+11. **Scripts source `scripts/lib.sh`** and call `kc` / `hc` (kubectl / helm pinned to `k3d-drawguess`), never bare `kubectl` / `helm`. Nothing runs as root (R6). Never map host ports 80, 443 or 6443.
+12. **Clean up only what is ours** (R5): `k3d cluster delete`, or Docker filters on `label=k3d.cluster=drawguess`. Never `docker system prune`, `docker rm -f $(docker ps -aq)` or similar global commands; other users share this Docker daemon.
 
 ## 6. Standard commands (the Makefile contract)
 
-Agents should create and keep these Makefile targets working. Their implementations live in `scripts/`.
+Agents should create and keep these Makefile targets working. Their implementations live in `scripts/`. A target not implemented yet exits non-zero with `not implemented yet (roadmap task …)`; the task that implements it replaces the stub script.
 
 | Command | Does |
 |---|---|
+| `make help` | List all targets |
+| `make preflight` / `make preflight-measure` | Host checks R1–R6; the `-measure` variant fails on other heavy workloads (run before recording numbers) |
+| `make host-sysctl` | Raise inotify limits (sudo, once per host) |
 | `make cluster-up` / `make cluster-down` | Create / delete the k3d cluster from `deploy/k3d/cluster.yaml` |
 | `make build` | Build all images tagged with the short git SHA and import them into k3d |
 | `make deploy ENV=dev` | `helm upgrade --install` the chart with `values-$(ENV).yaml` |

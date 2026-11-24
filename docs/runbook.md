@@ -2,6 +2,22 @@
 
 Operational procedures. Agents and team members: keep each entry accurate as features land. Format per entry: **Symptom → Check → Fix → Verify**.
 
+## Before anything on a new host
+- **Check:** `make preflight` (details for each R-number in `docs/host-environment.md`).
+- **Fix:** follow the hint printed on each FAIL line.
+- **Verify:** `preflight: no failures`. Before recording any number, `make preflight-measure` must also pass.
+
+## "too many open files" / `failed to create fsnotify watcher` (R1)
+- **Symptom:** `kubectl logs -f` fails, or config-reloader / Grafana sidecar pods crash-loop.
+- **Check:** `sysctl fs.inotify.max_user_instances fs.inotify.max_user_watches`.
+- **Fix:** `make host-sysctl` (sudo, persists across reboots).
+- **Verify:** `kubectl logs -f` on several pods at once works; affected pods become Ready after a restart.
+
+## `ImagePullBackOff` with `429 Too Many Requests` (R2)
+- **Check:** `kubectl describe pod` events; `make preflight` prints the remaining Docker Hub quota for this IP.
+- **Fix:** wait for the hourly window, use the registry mirror from `cluster-up`, or `docker login`; avoid repeated `cluster-down`/`cluster-up` cycles.
+- **Verify:** pods pull and become Ready.
+
 ## AI unavailable (`AIUnavailable` alert / banner shown to players)
 - **Check:** `kubectl -n <ns> get pods -l app=ai-inference`; `kubectl -n <ns> logs -l app=ai-inference --tail=100`; Grafana panel "AI circuit".
 - **Fix:** if pods are crash-looping after a release → `helm rollback`; if OOMKilled → raise memory limit in values; if KEDA shows 0 replicas in `play` profile → check the ScaledObject and Redis connectivity.

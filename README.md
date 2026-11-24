@@ -46,12 +46,14 @@ Start with [`AGENTS.md`](AGENTS.md), then take tasks in order from [`docs/roadma
 ## Quick start (once Phase 1–2 tasks are implemented)
 
 ```bash
+make help              # list all targets
+make preflight         # host checks (docs/host-environment.md); fix any FAIL first
 make cluster-up        # 4-node local k3d cluster with simulated zones
 make keda monitoring   # KEDA + Prometheus/Grafana
 make build deploy ENV=dev
 ```
 
-Prerequisites: Docker, k3d, kubectl, Helm 3, k6, Node.js 24, Python 3.12.
+Prerequisites: Docker, k3d, kubectl, Helm 3, k6, Node.js 24 (`nvm use` reads `.nvmrc`), Python 3.12. None needs root; on a shared host, read [`docs/host-environment.md`](docs/host-environment.md) first.
 
 ## Repository layout
 
