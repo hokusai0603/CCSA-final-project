@@ -2,6 +2,21 @@
 
 Agents: take the first unchecked task whose dependencies are done. Each task lists **acceptance criteria** that must be verified by actually running commands. Tick the box only when all criteria pass.
 
+Cross-cutting items are tagged inside the tasks that own them:
+
+- **R1–R6** host-environment risks, see `docs/host-environment.md`.
+- **D1–D7** demo pitfalls: designs or defaults that would make a demo scenario fail or mismeasure.
+
+| # | Pitfall | Demo | Owner tasks |
+|---|---|---|---|
+| D1 | PDB `minAvailable` = min replicas blocks drain; cordoned zone keeps pods `Pending` | 7 | P2-2, P2-7 |
+| D2 | Per-IP `/ws` rate limit throttles k6 (one source IP) | 5 | P2-2, P3-3 |
+| D3 | HPA scale-in waits 300 s by default | 5 | P2-6 |
+| D4 | KEDA `pollingInterval` 30 s dominates cold start | 6 | P2-6 |
+| D5 | Strokes drawn while disconnected are lost or duplicated | 2 | P1-4, P2-3 |
+| D6 | A killed pod cannot count its own interrupted round | 4 | P2-4 |
+| D7 | Default scrape/eval intervals make a < 60 s alert impossible | 9 | P3-1 |
+
 ---
 
 ## Phase 0 — Repository foundation
@@ -44,6 +59,7 @@ Agents: take the first unchecked task whose dependencies are done. Each task lis
 
 - [ ] **P1-4 Frontend**
   - Canvas drawing (mouse + touch), join by URL `?room=`, live strokes, AI guesses panel, timer, scores, banner for `ai_status`.
+  - Demo pitfall (D5, "0 lost strokes"): `lastSeq` replay only restores strokes the server already has. Strokes the player draws **while disconnected** must be queued in the client and resent after reconnect, each with a client stroke id `cid` so the server can drop duplicates (P2-3).
   - Acceptance: two browsers draw together; AI guesses appear; correct guess ends the round.
 
 - [ ] **P1-5 Docker images & Compose**
@@ -59,15 +75,19 @@ Agents: take the first unchecked task whose dependencies are done. Each task lis
 
 - [ ] **P2-2 Helm chart: app services**
   - Deployments, Services, Ingress (`/` → frontend, `/ws` → game-server), ConfigMap, probes, requests/limits, topology spread, non-root securityContext, `values-dev.yaml` / `values-prod.yaml`.
+  - Demo pitfall (D1, demo 7): topology spread constraints set `nodeTaintsPolicy: Honor`. Otherwise a cordoned node's zone still counts as a domain with 0 pods, and with `DoNotSchedule` the evicted pod stays `Pending`.
+  - Demo pitfall (D2, demo 5): the `/ws` rate limit is a values setting (`ingress.rateLimit`), so the load test can raise it (P3-3).
   - Acceptance: `make build deploy ENV=dev` on a fresh cluster → all pods Ready, game playable through the Ingress; pods of each Deployment are spread across ≥ 2 zones.
 
 - [ ] **P2-3 Multi-replica correctness**
   - Redis Pub/Sub fan-out between pods; room owner lease (§2); reconnect with `lastSeq` replay.
-  - Acceptance: with 3 game-server replicas, players forced onto different pods see each other's strokes; deleting the room-owner pod hands the timer to another pod within 3 s.
+  - Demo pitfall (D5): the server drops strokes whose `cid` it has already seen in the room (e.g. a Redis set with the room TTL); document `cid` in `architecture.md` §3.
+  - Acceptance: with 3 game-server replicas, players forced onto different pods see each other's strokes; deleting the room-owner pod hands the timer to another pod within 3 s; strokes drawn during a forced disconnect appear **exactly once** for every player.
 
 - [ ] **P2-4 Graceful shutdown**
   - SIGTERM handling per `AGENTS.md` rule 3; `preStop` hook if needed; `terminationGracePeriodSeconds: 30`; `maxUnavailable: 0`.
-  - Acceptance: demo scenario 4 passes — rolling update during play leaves `drawguess_rounds_interrupted_total` unchanged.
+  - Demo pitfall (D6): a pod cannot count its own death, and its counter disappears with it. `drawguess_rounds_interrupted_total` must be incremented by a **surviving** pod: e.g. the pod that takes over a room's owner lease and finds the timer stalled longer than lease timeout + 2 s, or the round state lost. Demo 4 also checks it from the client side: every `round_start` seen by the probe client has a matching `round_end`.
+  - Acceptance: demo scenario 4 passes — rolling update during play leaves `drawguess_rounds_interrupted_total` unchanged; **negative test**: scaling game-server to 0 for 10 s mid-round increases it (proves the metric can see an interruption).
 
 - [ ] **P2-5 AI degradation**
   - Circuit breaker on `ai:last_ok`, timer pause, `ai_status` messages, `XAUTOCLAIM` of stuck entries.
@@ -75,17 +95,22 @@ Agents: take the first unchecked task whose dependencies are done. Each task lis
 
 - [ ] **P2-6 Autoscaling**
   - Install KEDA (`make keda`); HPA for game-server; ScaledObject for ai-inference with `play` and `idle` profiles.
+  - Demo pitfall (D3, demo 5): HPA waits 300 s by default before scaling in. Make `behavior.scaleDown.stabilizationWindowSeconds` a values setting (demo: 60 s).
+  - Demo pitfall (D4, demo 6): KEDA checks the queue every `pollingInterval` (default 30 s), which dominates the measured cold start. Set it to 5 s and keep `cooldownPeriod` explicit. Demo 6 reports the cold start broken down: queue seen by KEDA → pod scheduled → model loaded (`/readyz`) → first `ai_guess`.
+  - Record the HPA / KEDA timing values next to the demo 5 / 6 numbers in `goals.md`.
   - Acceptance: `kubectl get hpa,scaledobject` shows both healthy; enqueuing 50 snapshots scales AI pods up, and they scale down after the queue drains.
 
 - [ ] **P2-7 PodDisruptionBudgets**
   - PDBs per `architecture.md` §7.
-  - Acceptance: demo scenario 7 passes.
+  - Demo pitfall (D1, demo 7): as designed, game-server PDB `minAvailable: 2` with HPA `minReplicas: 2` lets **no** pod be evicted, so `kubectl drain` waits forever. Fix: game-server `minReplicas: 3` (recommended), or PDB `maxUnavailable: 1`; update `architecture.md` §7 and add an ADR. Same check for every PDB against its minimum replicas.
+  - Acceptance: demo scenario 7 passes; draining any agent node completes in < 2 min while available pods never drop below the PDB.
 
 ## Phase 3 — Operations & evidence
 
 - [ ] **P3-1 Monitoring stack**
   - `make monitoring` installs kube-prometheus-stack; ServiceMonitors; Grafana dashboard JSON committed in `deploy/monitoring/dashboards/`.
-  - R5: Grafana admin password from a Secret (never the chart default `prom-operator`); Grafana not routed through the Ingress, reached via `kubectl port-forward` on `localhost:3001`. Scrape and rule-evaluation intervals ≤ 15 s (needed for demo 9's < 60 s alert target).
+  - R5: Grafana admin password from a Secret (never the chart default `prom-operator`); Grafana not routed through the Ingress, reached via `kubectl port-forward` on `localhost:3001`.
+  - Demo pitfall (D7, demo 9): the alert delay adds up as circuit-breaker 5 s + scrape interval (default 30 s) + rule evaluation interval + `for: 30s`. Set scrape and evaluation intervals ≤ 15 s, or the < 60 s target is not reachable.
   - Acceptance: dashboard shows all metrics from `architecture.md` §8 with live data.
 
 - [ ] **P3-2 Alerts**
@@ -94,7 +119,9 @@ Agents: take the first unchecked task whose dependencies are done. Each task lis
 
 - [ ] **P3-3 Load test**
   - k6 script in `loadtest/` that joins rooms of 4–6 virtual players who send strokes at a realistic rate.
-  - Acceptance: demo scenario 5 passes; k6 summary saved to `loadtest/results/`.
+  - Demo pitfall (D2): all virtual players come from one source IP, so the per-IP `/ws` rate limit throttles the load test instead of the app being measured. Run with a load-test values override that raises the limit (and say so in the results).
+  - k6 runs on the same host as the cluster (R4): record its CPU use and run `make preflight-measure` first.
+  - Acceptance: demo scenario 5 passes; k6 summary saved to `loadtest/results/` shows 0 failed WebSocket connects and 0 HTTP 429.
 
 - [ ] **P3-4 Demo scripts**
   - `scripts/demo-1.sh` … `demo-9.sh` + `make demo-<n>`; each prints the measured numbers.
