@@ -1,0 +1,24 @@
+# Local demo cluster: 1 server + 3 agents, each agent in its own simulated zone.
+# Create:  k3d cluster create --config deploy/k3d/cluster.yaml
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: drawguess
+servers: 1
+agents: 3
+ports:
+  - port: 8080:80          # http://localhost:8080 -> Traefik ingress
+    nodeFilters:
+      - loadbalancer
+options:
+  k3s:
+    nodeLabels:
+      - label: topology.kubernetes.io/zone=zone-a
+        nodeFilters:
+          - agent:0
+      - label: topology.kubernetes.io/zone=zone-b
+        nodeFilters:
+          - agent:1
+      - label: topology.kubernetes.io/zone=zone-c
+        nodeFilters:
+          - agent:2

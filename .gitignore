@@ -1,0 +1,28 @@
+# Dependencies & builds
+node_modules/
+dist/
+build/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Model artifacts & datasets (publish models as release assets or Git LFS)
+*.onnx
+*.npy
+*.ndjson
+services/ai-inference/training/data/
+
+# Secrets — commit only *.example files
+.env
+*.env
+!*.env.example
+values-secret*.yaml
+
+# Load test output
+loadtest/results/*.json
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
