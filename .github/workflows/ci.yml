@@ -33,7 +33,8 @@ jobs:
         with:
           node-version-file: .nvmrc
 
-      - uses: astral-sh/setup-uv@v10
+      # setup-uv publishes no floating major tag (v10 does not resolve); pin the release commit.
+      - uses: astral-sh/setup-uv@1db35dd8eee11c5894872e0b383ae6c406cf738d # v10.4.0
         with:
           python-version: "3.12"
 
