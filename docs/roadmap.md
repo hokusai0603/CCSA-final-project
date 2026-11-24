@@ -39,9 +39,11 @@ Cross-cutting items are tagged inside the tasks that own them:
   - Done: k3s pinned to `v1.37.2-k3s1`; cache registry `k3d-drawguess-cache` (`registry:2.8.3`, `127.0.0.1:5005`, volume `drawguess-registry-cache`) is created by `cluster-up`, kept by `cluster-down`, removed by `make cache-down`. Measured: cycle 1 the cache received 407 MB from upstream; cycle 2 it received 241 KB while serving 132 blob requests (cache size unchanged at 190 MB). Cluster ready in ~45 s.
   - Human note: the Docker Hub quota shown by `preflight` did not drop in cycle 1 because `rancher/*` images are exempt from the anonymous limit; application base images (node, nginx, python, redis, postgres) do count, and the cache absorbs them too. `EXPOSE=1` was verified reachable from the LAN address and unreachable again after recreating without it.
 
-- [ ] **P0-3 CI**
+- [x] **P0-3 CI**
   - GitHub Actions workflow: lint + unit tests for each service, and `helm lint` + `helm template` for the chart.
   - Acceptance: workflow passes on the default branch.
+  - Done: `.github/workflows/ci.yml` runs `make lint` + `make test`, which discover service projects and the chart (`scripts/projects.sh`, convention in `AGENTS.md` §6). First green run: commit `d5edfc8` on `main`. With no services yet, CI covers shellcheck, the Makefile contract and `make help`; the service, Helm and dashboard branches were verified locally on a fixture copy (all pass; 10 injected faults each fail the run).
+  - Human note: the setup-uv warning "No file matched … uv.lock" is expected until the first Python service commits `uv.lock`. `astral-sh/setup-uv` has no floating major tag, so it is pinned by commit SHA; bump it by hand.
 
 ## Phase 1 — MVP gameplay (Docker Compose)
 
