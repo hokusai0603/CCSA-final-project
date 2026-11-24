@@ -1,5 +1,7 @@
 # DrawGuess — CCSA Final Project
 
+[![CI](https://github.com/hokusai0603/CCSA-final-project/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hokusai0603/CCSA-final-project/actions/workflows/ci.yml)
+
 A multiplayer collaborative drawing game where a small AI model guesses what the players are drawing. Built on **Docker + Kubernetes** to demonstrate **stability, availability, and accessibility** for the *Cloud Computing and System Architecture* term project.
 
 多人協作畫圖遊戲：玩家一起作畫，由小型 AI 模型猜畫的內容，猜中即得分。本專案的重點不在遊戲規模，而是展示我們能**管理 Kubernetes 並維運一個遊戲服務**：自我修復、零停機更新、自動擴展、可觀測性與優雅降級，每一項都能現場示範並有實測數據。

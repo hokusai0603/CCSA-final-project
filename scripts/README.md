@@ -8,4 +8,5 @@ Conventions:
 - A stub script ends with `not_implemented`; the roadmap task named in its header replaces it.
 - `demo.sh <n>` dispatches to `demo-<n>.sh`; each demo script starts with `"$(dirname "$0")/preflight.sh" --measure`.
 - `host-sysctl.sh` is the only script run as root (`make host-sysctl`); it does not source `lib.sh`.
-- Lint: `shellcheck -x -P scripts scripts/*.sh` must be clean.
+- `lint.sh` / `test.sh` (`make lint` / `make test`, also what CI runs) discover service projects through `projects.sh`; see the convention in `AGENTS.md` §6. With no projects they pass and say so.
+- Lint: `make lint` (includes `shellcheck -x -P scripts scripts/*.sh`) must be clean.

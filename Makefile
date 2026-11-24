@@ -9,7 +9,7 @@ PLAYERS ?= 200
 EXPOSE  ?= 0
 
 .PHONY: help preflight preflight-measure host-sysctl \
-        cluster-up cluster-down cache-down build deploy monitoring keda test loadtest \
+        cluster-up cluster-down cache-down build deploy monitoring keda lint test loadtest \
         demo-1 demo-2 demo-3 demo-4 demo-5 demo-6 demo-7 demo-8 demo-9
 
 help: ## List all targets
@@ -52,7 +52,10 @@ keda: ## Install KEDA
 	@scripts/keda.sh
 
 ##@ Verify
-test: ## Unit tests for all services
+lint: ## Static checks: shellcheck, Makefile contract, service linters, helm lint/template (same as CI)
+	@scripts/lint.sh
+
+test: ## Unit tests for all services (same as CI)
 	@scripts/test.sh
 
 loadtest: ## Run the k6 scenario with $(PLAYERS) simulated players

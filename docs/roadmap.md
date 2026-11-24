@@ -45,6 +45,8 @@ Cross-cutting items are tagged inside the tasks that own them:
 
 ## Phase 1 — MVP gameplay (Docker Compose)
 
+Every service project follows the lint/test convention in `AGENTS.md` §6 (npm `lint` + `test` scripts, or uv + ruff + pytest), so `make lint`, `make test` and CI pick it up automatically.
+
 - [ ] **P1-1 AI model training** (`services/ai-inference/training/`)
   - Download QuickDraw simplified data for the categories in `categories.txt` (~50), train a small CNN on 28×28 rasters, export `model.onnx`.
   - Acceptance: top-1 validation accuracy ≥ 80 %; ONNX file < 5 MB; a script prints predictions for 5 sample drawings. The model file is published as a release asset or stored via Git LFS — not as a plain git blob.

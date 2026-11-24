@@ -79,6 +79,12 @@ These rules exist because the demo scenarios depend on them.
 
 Agents should create and keep these Makefile targets working. Their implementations live in `scripts/`. A target not implemented yet exits non-zero with `not implemented yet (roadmap task …)`; the task that implements it replaces the stub script.
 
+`make lint` / `make test` discover service projects (`scripts/projects.sh`), and CI (`.github/workflows/ci.yml`) runs exactly these two targets. A new service is covered as soon as it follows the convention; do not edit the workflow per service:
+
+- **Node** (`services/<name>/package.json`): npm scripts `lint` and `test`; commit `package-lock.json` (CI uses `npm ci`).
+- **Python** (a `pyproject.toml` under `services/`, at most 3 levels deep): managed by **uv**, `ruff` and `pytest` in the `dev` dependency group; commit `uv.lock` (CI runs with `--locked`).
+- **Helm**: `deploy/helm/drawguess/Chart.yaml` is linted and rendered with every `values-*.yaml`.
+
 | Command | Does |
 |---|---|
 | `make help` | List all targets |
@@ -90,7 +96,8 @@ Agents should create and keep these Makefile targets working. Their implementati
 | `make deploy ENV=dev` | `helm upgrade --install` the chart with `values-$(ENV).yaml` |
 | `make monitoring` | Install kube-prometheus-stack + dashboards |
 | `make keda` | Install KEDA |
-| `make test` | Unit tests for all services |
+| `make lint` | shellcheck, Makefile contract, every service's linter, `helm lint` + `helm template` (CI runs this) |
+| `make test` | Unit tests for all services (CI runs this) |
 | `make loadtest PLAYERS=200` | Run the k6 scenario against the cluster |
 | `make demo-<n>` | Run demo scenario *n* from `docs/demo-scenarios.md` |
 

@@ -1,0 +1,61 @@
+# CI runs exactly what developers run locally: `make lint` and `make test`
+# (scripts/lint.sh, scripts/test.sh). Service projects and the Helm chart are
+# discovered, so new services are covered without editing this file.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Same versions as the documented local toolchain (README prerequisites).
+  HELM_VERSION: v3.22.1
+  SHELLCHECK_VERSION: v0.11.0
+
+jobs:
+  checks:
+    name: lint + unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+
+      - uses: azure/setup-helm@v5
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Install shellcheck ${{ env.SHELLCHECK_VERSION }}
+        run: |
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+            | tar -xJ -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/shellcheck-${SHELLCHECK_VERSION}" >> "$GITHUB_PATH"
+
+      - name: Tool versions
+        run: |
+          node --version
+          uv --version
+          helm version --short
+          shellcheck --version | sed -n 2p
+
+      - name: make lint
+        run: make lint
+
+      - name: make test
+        run: make test
