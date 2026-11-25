@@ -12,6 +12,7 @@ The project is graded on whether we can **manage Kubernetes and operate a live g
 - **Target:** a deleted game-server pod is replaced and Ready in **< 30 s**.
 - **Target:** affected players reconnect automatically in **< 5 s** with **0 lost strokes**.
 - **Target:** with all AI pods down, drawing/chat keep working, the timer pauses, and no points are lost.
+- **Target:** when a whole node fails, its pods are replaced and Ready in **< 90 s**, and the AI circuit never opens (N+1 capacity, ADR-008).
 
 ## G3 — Zero-downtime operations
 - **Target:** a rolling update of game-server during active play causes **0 interrupted rounds** (`drawguess_rounds_interrupted_total` unchanged).
@@ -44,6 +45,7 @@ The game is small; autoscaling is here to prove the system *adapts*, and to cont
 | G1 | rollback to healthy | < 60 s | | |
 | G2 | pod replaced & Ready | < 30 s | | |
 | G2 | player reconnect | < 5 s, 0 lost strokes | | |
+| G2 | node failure: replacements Ready | < 90 s, AI circuit stays closed | | |
 | G3 | rounds interrupted during rolling update | 0 | | |
 | G3 | min available pods during drain | ≥ PDB | | |
 | G4 | game-server replicas at 200 players | > 2 | | |

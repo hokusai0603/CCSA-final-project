@@ -6,7 +6,7 @@
 |---|---|---|---|
 | `frontend` | Deployment | 2 | nginx serving the built static client |
 | `game-server` | Deployment + HPA | 2–8 | WebSocket connections, room logic, scoring, enqueue snapshots |
-| `ai-inference` | Deployment + KEDA ScaledObject | 2–6 during play (0 allowed in `idle` profile) | Consume snapshots, run the CNN, publish guesses |
+| `ai-inference` | Deployment + KEDA ScaledObject | 2–6 during play (0 allowed in `idle` profile); all active, one spare (ADR-008) | Consume snapshots, run the CNN, publish guesses |
 | `redis` | StatefulSet + PVC | 1 | Live room state, stroke log, Pub/Sub, the `ai:snapshots` stream |
 | `postgres` | StatefulSet + PVC | 1 | Players, rounds, scores, leaderboard |
 | Ingress | Traefik (k3s built-in) | — | Single entry point, TLS, WebSocket upgrade, rate limiting middleware |
@@ -63,6 +63,7 @@ Every stroke gets a monotonically increasing `seq` per room (`INCR room:{id}:seq
 | `ai:snapshots` | stream | AI work queue, consumer group `ai-workers` |
 | `ai:pending:{id}` | string, TTL 5 s | coalescing flag, one pending request per room |
 | `ai:last_ok` | string, TTL | heartbeat refreshed by workers; used by the AI circuit breaker |
+| `ai:dead` | stream | dead-letter: snapshots that failed 2 deliveries, kept for inspection |
 
 All room keys get a TTL (e.g. 2 h) refreshed on activity so abandoned rooms disappear.
 
@@ -75,7 +76,7 @@ All room keys get a TTL (e.g. 2 h) refreshed on activity so abandoned rooms disa
 
 ## 6. Degradation and defence in depth (AI)
 
-1. **Prevent** — ≥ 2 AI replicas spread across zones, resource limits, PDB `minAvailable: 1`.
+1. **Prevent** — ≥ 2 AI replicas spread across zones, one spare replica above the load (N+1, ADR-008), resource limits, PDB `minAvailable: 1` (voluntary disruptions only). Snapshot size is capped (strokes per round, points per stroke). An entry delivered more than twice goes to `ai:dead` and is acknowledged, so a poison snapshot cannot crash every worker in turn.
 2. **Recover fast** — unacknowledged stream entries are reclaimed by other workers (`XAUTOCLAIM` after 3 s), so one pod crashing costs players ~1 s.
 3. **Degrade gracefully** — if `ai:last_ok` is older than 5 s (circuit open), game-servers broadcast `ai_status {available:false}`, **pause the round timer**, and keep drawing/chat working. When the circuit closes, the timer resumes and the AI guesses the latest canvas. Players never lose points because of an AI outage.
 
@@ -84,13 +85,13 @@ All room keys get a TTL (e.g. 2 h) refreshed on activity so abandoned rooms disa
 | Resource | For | Key settings |
 |---|---|---|
 | Namespace | `drawguess-dev`, `drawguess-prod` | one per environment |
-| Deployment | frontend, game-server, ai-inference | probes, requests/limits, topology spread on zone, non-root securityContext |
+| Deployment | frontend, game-server, ai-inference | probes, requests/limits, topology spread on zone (`nodeTaintsPolicy: Honor`), non-root securityContext; game-server and ai-inference tolerate `not-ready` / `unreachable` for 15 s, not 300 s |
 | StatefulSet + PVC | redis, postgres | `local-path` StorageClass (k3s default) |
 | Service | all components | ClusterIP; headless for StatefulSets |
 | Ingress + Traefik Middleware | frontend `/`, game-server `/ws` | rate limit on `/ws` |
 | ConfigMap / Secret | app config / DB password | Secret values come from `values-*.yaml` overrides, never committed |
 | HPA | game-server | CPU 60 % baseline; stretch: custom metric `ws_connections` via prometheus-adapter |
-| KEDA ScaledObject | ai-inference | `redis-streams` trigger on `ai:snapshots` / group `ai-workers`, `pendingEntriesCount` target 5; `minReplicaCount` 2 (`play` profile) or 0 (`idle` profile) |
+| KEDA ScaledObject | ai-inference | two triggers, highest wins (ADR-008): active rooms → `ceil(rooms / R) + 1`; `redis-streams` lag on `ai:snapshots` / group `ai-workers` → `ceil(lag / 5)` (not `pendingEntriesCount`); `pollingInterval` 5 s; `minReplicaCount` 2 (`play`) or 0 (`idle`); `maxReplicaCount` 6 |
 | PodDisruptionBudget | game-server (`minAvailable: 2`), ai-inference (`minAvailable: 1`), frontend (`minAvailable: 1`) | |
 | ServiceMonitor | game-server, ai-inference | scraped by Prometheus |
 | PrometheusRule | alerts | see `goals.md` G5 |

@@ -13,5 +13,6 @@ Each scenario is run with the Grafana dashboard visible and at least two browser
 | 7 | Node maintenance | `kubectl drain` one agent node | PDB, topology spread | Pods move one by one | Available pods never below PDB | G3 |
 | 8 | Bad release + rollback | deploy an image whose `/readyz` fails, then `helm rollback` | Readiness gating, rollback | New pods never receive traffic; rollback restores | Healthy < 60 s, no user-visible errors | G1 |
 | 9 | Alerting | run scenario 3 and watch Alertmanager | PrometheusRule | `AIUnavailable` fires | Fires < 60 s | G5 |
+| 10 | Node failure | `docker stop` one k3d agent node mid-round (it disappears without a drain), later `docker start` it | Node lifecycle, `tolerationSeconds`, N+1 spare capacity (ADR-008) | Node `NotReady`, its pods replaced on other zones; guesses slow down slightly but never stop | Replacements Ready < 90 s after the stop; no AI circuit open; affected players reconnect < 5 s | G2 |
 
 Record every run: date, commit SHA, numbers, and a screenshot path, in the results table of `goals.md`.

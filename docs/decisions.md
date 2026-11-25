@@ -34,3 +34,12 @@ Short records of decisions and their trade-offs. Add a new entry instead of sile
 ## ADR-007 No CDN in the demo environment
 **Decision:** the frontend is served by nginx through the Ingress; a CDN is documented as production design only.
 **Why:** with all players on one network a CDN shows no measurable effect. A CDN would only speed up static assets, not WebSocket or AI traffic.
+
+## ADR-008 AI autoscaling: every replica active, N+1 spare, rooms + lag triggers
+**Decision:** all ai-inference replicas consume the queue (no standby pods). KEDA scales them on two triggers and takes the higher: **active rooms** (proactive, `ceil(rooms / R) + 1`, i.e. live capacity plus one spare replica) and **stream lag** (reactive safety net, `ceil(lag / 5)`, the redis-streams lag metric, not `pendingEntriesCount`). Bounds: min 2 in `play` (spread across zones), 0 in `idle`, max 6. `R` = rooms one replica serves at one snapshot per second, measured in P2-6b; ONNX Runtime runs one intra-op thread per replica so throughput scales with replicas.
+**Why:**
+- Workers are stateless queue consumers; a standby pod would idle while a crashed worker's entries are reclaimed by the others anyway (`XAUTOCLAIM`).
+- AI load follows **rooms**, not players: coalescing allows one pending snapshot per room.
+- Scaling only on lag reacts after players already see late guesses, plus the cold start; the rooms trigger adds capacity as rooms open.
+- With one spare, a single crash costs no capacity. Two simultaneous crashes degrade gracefully: coalescing bounds the backlog to the number of rooms, so guesses slow down (e.g. 1 s → ~1.3 s per room) instead of piling up.
+**Cost:** one extra replica during play; the rooms trigger needs a room-count source (a game-server endpoint, or Prometheus). Node failure is not covered by the triggers: dead pods still count as replicas, so D9 (`tolerationSeconds` 15 s) is required. Losing a whole zone keeps full capacity only with `ceil(need × 3/2)` replicas (stretch S-7).

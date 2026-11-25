@@ -10,7 +10,7 @@ EXPOSE  ?= 0
 
 .PHONY: help tools preflight preflight-measure host-sysctl \
         cluster-up cluster-down cache-down build stub-image deploy monitoring keda lint test loadtest \
-        demo-1 demo-2 demo-3 demo-4 demo-5 demo-6 demo-7 demo-8 demo-9
+        demo-1 demo-2 demo-3 demo-4 demo-5 demo-6 demo-7 demo-8 demo-9 demo-10
 
 help: ## List all targets
 	@awk 'BEGIN { FS = ":.*## " } \
@@ -86,3 +86,5 @@ demo-8: ## Bad release + helm rollback (G1)
 	@scripts/demo.sh 8
 demo-9: ## Alerting: AIUnavailable fires < 60 s (G5)
 	@scripts/demo.sh 9
+demo-10: ## Node failure: replacements Ready < 90 s (G2)
+	@scripts/demo.sh 10

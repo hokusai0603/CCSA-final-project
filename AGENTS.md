@@ -21,6 +21,7 @@ When a trade-off appears between "more game features" and "better operability / 
 | `docs/decisions.md` | Architecture decisions and why. Do not contradict these silently |
 | `docs/runbook.md` | Operational procedures; keep it updated as features land |
 | `docs/host-environment.md` | Risks R1–R6 of running on a shared host, and which task mitigates each |
+| `docs/team-plan.md` | Lanes A/B/C, directory ownership, contracts and fakes for parallel work, team rules |
 
 ## 3. Fixed technology choices
 
@@ -104,7 +105,7 @@ Agents should create and keep these Makefile targets working. Their implementati
 
 ## 7. How to work on a task
 
-1. Pick the first unchecked task in `docs/roadmap.md` whose dependencies are done.
+1. Pick the first unchecked task in `docs/roadmap.md` **in your lane** (`Owner: A/B/C`) whose **Needs** are done. Work against `contracts/` and the fakes (mock WebSocket server, fake AI, dummy model, stub image) instead of waiting for another lane (`docs/team-plan.md`).
 2. Read its **Acceptance criteria**. Do only what the task asks.
 3. Implement, then verify every acceptance criterion yourself (run the commands; do not assume).
 4. Update docs touched by the change (`architecture.md`, `runbook.md`, `decisions.md`).

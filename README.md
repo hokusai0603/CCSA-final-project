@@ -39,11 +39,11 @@ Full design: [`docs/architecture.md`](docs/architecture.md)
 | 4 | Elasticity | 200 simulated players trigger HPA scale-out and scale-in; KEDA scales AI from queue length |
 | 5 | Observability | Live Grafana dashboard; alert fires < 1 min after a failure |
 
-Details: [`docs/goals.md`](docs/goals.md) · Demo script: [`docs/demo-scenarios.md`](docs/demo-scenarios.md)
+Details: [`docs/goals.md`](docs/goals.md) · Demo script (10 scenarios): [`docs/demo-scenarios.md`](docs/demo-scenarios.md)
 
 ## For AI coding agents
 
-Start with [`AGENTS.md`](AGENTS.md), then take tasks in order from [`docs/roadmap.md`](docs/roadmap.md).
+Start with [`AGENTS.md`](AGENTS.md), then take the next task in your lane from [`docs/roadmap.md`](docs/roadmap.md). Lanes, ownership and how the team works in parallel: [`docs/team-plan.md`](docs/team-plan.md).
 
 ## Quick start (once Phase 1–2 tasks are implemented)
 
