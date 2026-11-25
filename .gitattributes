@@ -1,0 +1,8 @@
+# Force LF in the working tree on every OS. A checkout with CRLF (Windows
+# core.autocrlf=true) breaks shell scripts with "/usr/bin/env: 'bash\r'".
+* text=auto eol=lf
+
+*.png  binary
+*.jpg  binary
+*.onnx binary
+*.npy  binary

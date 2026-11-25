@@ -73,6 +73,32 @@ else
   warn "python 3.12 not found (needed for ai-inference development; 'uv python install 3.12' works without sudo)"
 fi
 
+info "== checkout and machine"
+crlf=$(grep -lI $'\r' "$REPO_ROOT"/scripts/*.sh "$REPO_ROOT"/Makefile 2>/dev/null || true)
+if [[ -n $crlf ]]; then
+  f "CRLF line endings in: $(echo "$crlf" | xargs -n1 basename | tr '\n' ' ')— re-checkout: git rm -r --cached . && git reset --hard (.gitattributes forces LF)"
+else
+  ok "scripts use LF line endings"
+fi
+mem_gb=$(awk '/^MemTotal:/ {printf "%d", $2 / 1048576}' /proc/meminfo)
+if ((mem_gb < 12)); then
+  warn "${mem_gb} GB RAM visible: the full stack with monitoring needs ~10-12 GB (on WSL2 raise memory in %UserProfile%\\.wslconfig)"
+else
+  ok "${mem_gb} GB RAM visible"
+fi
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  info "     WSL2 detected (docs/dev-setup.md)"
+  case $REPO_ROOT in
+    /mnt/*) f "repo is on the Windows filesystem ($REPO_ROOT): clone it inside WSL (e.g. ~/CCSA-final-project); /mnt/* is slow and breaks file modes" ;;
+    *) ok "repo is on the WSL filesystem" ;;
+  esac
+  if [[ $(ps -p 1 -o comm= 2>/dev/null) == systemd ]]; then
+    ok "systemd is PID 1 (sysctl settings persist across WSL restarts)"
+  else
+    warn "systemd is not enabled in WSL: add [boot] systemd=true to /etc/wsl.conf, then 'wsl --shutdown'"
+  fi
+fi
+
 info "== R1 inotify limits"
 inst=$(sysctl -n fs.inotify.max_user_instances)
 watches=$(sysctl -n fs.inotify.max_user_watches)

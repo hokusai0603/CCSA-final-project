@@ -55,7 +55,7 @@ make keda monitoring   # KEDA + Prometheus/Grafana
 make build deploy ENV=dev
 ```
 
-Prerequisites: Docker, k3d ≥ 5.9, kubectl 1.36–1.38 (the cluster runs k3s 1.37), Helm 3, k6, Node.js 24 (`nvm use` reads `.nvmrc`), Python 3.12. None needs root; on a shared host, read [`docs/host-environment.md`](docs/host-environment.md) first.
+Setup for Linux and Windows (WSL2): [`docs/dev-setup.md`](docs/dev-setup.md) (`make tools` installs the pinned toolchain). Prerequisites: Docker, k3d ≥ 5.9, kubectl 1.36–1.38 (the cluster runs k3s 1.37), Helm 3, k6, Node.js 24 (`nvm use` reads `.nvmrc`), Python 3.12. None needs root; on a shared host, read [`docs/host-environment.md`](docs/host-environment.md) first.
 
 ## Repository layout
 

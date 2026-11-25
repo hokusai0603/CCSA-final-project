@@ -8,7 +8,7 @@ ENV     ?= dev
 PLAYERS ?= 200
 EXPOSE  ?= 0
 
-.PHONY: help preflight preflight-measure host-sysctl \
+.PHONY: help tools preflight preflight-measure host-sysctl \
         cluster-up cluster-down cache-down build deploy monitoring keda lint test loadtest \
         demo-1 demo-2 demo-3 demo-4 demo-5 demo-6 demo-7 demo-8 demo-9
 
@@ -20,6 +20,9 @@ help: ## List all targets
 	@echo "  Variables: ENV=$(ENV) (dev|prod)  PLAYERS=$(PLAYERS)  EXPOSE=$(EXPOSE) (0|1)"
 
 ##@ Host
+tools: ## Install the pinned CLI toolchain into ~/.local/bin (docs/dev-setup.md)
+	@scripts/install-tools.sh
+
 preflight: ## Check tools, host limits, ports and image-pull quota (docs/host-environment.md)
 	@scripts/preflight.sh
 
