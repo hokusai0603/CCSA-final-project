@@ -9,7 +9,7 @@ PLAYERS ?= 200
 EXPOSE  ?= 0
 
 .PHONY: help tools preflight preflight-measure host-sysctl \
-        cluster-up cluster-down cache-down build deploy monitoring keda lint test loadtest \
+        cluster-up cluster-down cache-down build stub-image deploy monitoring keda lint test loadtest \
         demo-1 demo-2 demo-3 demo-4 demo-5 demo-6 demo-7 demo-8 demo-9
 
 help: ## List all targets
@@ -44,6 +44,9 @@ cache-down: ## Remove the Docker Hub pull-through cache and its volume
 
 build: ## Build all images (tag = short git SHA) and import them into k3d
 	@scripts/build.sh
+
+stub-image: ## Build the placeholder service image (services/stub) and import it into k3d
+	@scripts/stub-image.sh
 
 deploy: ## helm upgrade --install with values-$(ENV).yaml
 	@scripts/deploy.sh $(ENV)

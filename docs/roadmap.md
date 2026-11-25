@@ -45,6 +45,16 @@ Cross-cutting items are tagged inside the tasks that own them:
   - Done: `.github/workflows/ci.yml` runs `make lint` + `make test`, which discover service projects and the chart (`scripts/projects.sh`, convention in `AGENTS.md` §6). First green run: commit `d5edfc8` on `main`. With no services yet, CI covers shellcheck, the Makefile contract and `make help`; the service, Helm and dashboard branches were verified locally on a fixture copy (all pass; 10 injected faults each fail the run).
   - Human note: the setup-uv warning "No file matched … uv.lock" is expected until the first Python service commits `uv.lock`. `astral-sh/setup-uv` has no floating major tag, so it is pinned by commit SHA; bump it by hand.
 
+- [x] **P0-4 Developer setup (Linux + Windows/WSL2)**
+  - `make tools` installs the pinned toolchain; `.gitattributes` forces LF; preflight checks CRLF, RAM and WSL pitfalls; `docs/dev-setup.md`.
+  - Acceptance: `make tools` on a fresh `$HOME` installs all 7 tools with checksums; a re-run skips them; preflight FAILs on an injected CRLF script.
+  - Done: verified on Linux. Human note: the WSL2 steps are untested; the Windows teammate runs `make preflight` on first setup and reports anything it flags.
+
+- [x] **P0-5 Stub service image** (`services/stub`)
+  - Placeholder image with probes, §8 metric names, WebSocket echo, graceful shutdown and failure knobs (`READY_DELAY_MS`, `FAIL_READY`, `CRASH_AFTER_MS`, `/burn`), so chart, autoscaling, monitoring and demo work can start before the real services (see `services/stub/README.md`).
+  - Acceptance: `make test` runs its unit tests; the image runs as non-root; on k3d it spreads across zones, drains WebSocket clients on pod delete, blocks a `FAIL_READY=1` rollout, crash-loops with `CRASH_AFTER_MS`, and scales an HPA with `/burn`.
+  - Done: all verified on k3d (numbers in the stub README).
+
 ## Phase 1 — MVP gameplay (Docker Compose)
 
 Every service project follows the lint/test convention in `AGENTS.md` §6 (npm `lint` + `test` scripts, or uv + ruff + pytest), so `make lint`, `make test` and CI pick it up automatically.
@@ -83,6 +93,9 @@ Every service project follows the lint/test convention in `AGENTS.md` §6 (npm `
   - Deployments, Services, Ingress (`/` → frontend, `/ws` → game-server), ConfigMap, probes, requests/limits, topology spread, non-root securityContext, `values-dev.yaml` / `values-prod.yaml`.
   - Demo pitfall (D1, demo 7): topology spread constraints set `nodeTaintsPolicy: Honor`. Otherwise a cordoned node's zone still counts as a domain with 0 pods, and with `DoNotSchedule` the evicted pod stays `Pending`.
   - Demo pitfall (D2, demo 5): the `/ws` rate limit is a values setting (`ingress.rateLimit`), so the load test can raise it (P3-3).
+  - Lessons from the stub on k3d (P0-5):
+    - A Node service that blocks its event loop under load (synchronous CPU work) fails its probes: pods turn unready (503 at the Ingress) and liveness restarts them. Keep CPU work off the main thread. Give liveness `timeoutSeconds` ≥ 2 and `failureThreshold` ≥ 3, so load alone does not restart pods.
+    - Traefik starts routing to a newly Ready pod a few seconds after `rollout status` returns. Count that lag in G2's "pod Ready" vs "players back" numbers.
   - Acceptance: `make build deploy ENV=dev` on a fresh cluster → all pods Ready, game playable through the Ingress; pods of each Deployment are spread across ≥ 2 zones.
 
 - [ ] **P2-3 Multi-replica correctness**

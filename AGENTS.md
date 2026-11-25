@@ -47,6 +47,7 @@ services/frontend/        static web client (canvas, WebSocket client, reconnect
 services/game-server/     WebSocket server, room logic, scoring, snapshot enqueueing
 services/ai-inference/    queue worker: rasterize strokes -> ONNX model -> publish guesses
 services/ai-inference/training/   offline training + ONNX export (not deployed)
+services/stub/            placeholder image (probes, metrics, WebSocket, failure knobs) used until real images exist; demo 8's bad release
 deploy/k3d/               local multi-node cluster definition
 deploy/helm/drawguess/    the Helm chart for all app components + Redis + PostgreSQL
 deploy/monitoring/        values for kube-prometheus-stack, Grafana dashboards (JSON)
