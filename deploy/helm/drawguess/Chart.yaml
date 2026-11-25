@@ -1,0 +1,8 @@
+apiVersion: v2
+name: drawguess
+description: DrawGuess game (frontend, game-server, ai-inference) with in-cluster Redis and PostgreSQL
+type: application
+# Chart version: bump on every chart change. appVersion is informational; images are pinned in values.
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.33.0-0"

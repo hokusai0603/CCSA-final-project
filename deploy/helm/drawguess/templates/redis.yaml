@@ -1,0 +1,110 @@
+{{- if .Values.redis.enabled }}
+{{- $name := include "drawguess.redis.fullname" . }}
+# Headless Service: stable network identity for the StatefulSet pod.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-headless
+  labels:
+    {{- include "drawguess.labels" (dict "ctx" $ "component" "redis") | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "drawguess.selectorLabels" (dict "ctx" $ "component" "redis") | nindent 4 }}
+  ports:
+    - {name: redis, port: 6379, targetPort: redis}
+---
+# Client Service: what the apps connect to (REDIS_URL=redis://{{ $name }}:6379).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "drawguess.labels" (dict "ctx" $ "component" "redis") | nindent 4 }}
+spec:
+  selector:
+    {{- include "drawguess.selectorLabels" (dict "ctx" $ "component" "redis") | nindent 4 }}
+  ports:
+    - {name: redis, port: 6379, targetPort: redis}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "drawguess.labels" (dict "ctx" $ "component" "redis") | nindent 4 }}
+spec:
+  serviceName: {{ $name }}-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "drawguess.selectorLabels" (dict "ctx" $ "component" "redis") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "drawguess.labels" (dict "ctx" $ "component" "redis") | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.stateful.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          args:
+            - redis-server
+            - --dir
+            - /data
+            - --appendonly
+            - {{ ternary "yes" "no" .Values.redis.appendonly | quote }}
+            - --appendfsync
+            - {{ .Values.redis.appendfsync | quote }}
+            - --maxmemory
+            - {{ .Values.redis.maxmemory | quote }}
+            - --maxmemory-policy
+            - {{ .Values.redis.maxmemoryPolicy | quote }}
+            # Reachable only through ClusterIP Services inside the cluster.
+            - --protected-mode
+            - "no"
+          ports:
+            - {name: redis, containerPort: 6379}
+          securityContext:
+            {{- include "drawguess.containerSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          startupProbe:
+            exec: {command: [redis-cli, ping]}
+            periodSeconds: 2
+            failureThreshold: 30
+          readinessProbe:
+            exec: {command: [sh, -c, 'redis-cli ping | grep -q PONG']}
+            periodSeconds: 5
+            timeoutSeconds: 2
+          livenessProbe:
+            tcpSocket: {port: redis}
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          volumeMounts:
+            - {name: data, mountPath: /data}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "drawguess.selectorLabels" (dict "ctx" $ "component" "redis") | nindent 10 }}
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- include "drawguess.storageClass" . | nindent 8 }}
+        resources:
+          requests:
+            storage: {{ .Values.redis.persistence.size }}
+{{- end }}

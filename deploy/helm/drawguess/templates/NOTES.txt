@@ -1,0 +1,14 @@
+DrawGuess release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+{{- if .Values.redis.enabled }}
+
+Redis:       redis://{{ include "drawguess.redis.fullname" . }}:6379  (AOF: {{ .Values.redis.appendonly }})
+{{- end }}
+{{- if .Values.postgres.enabled }}
+PostgreSQL:  host {{ include "drawguess.postgres.fullname" . }}, port 5432, db {{ .Values.postgres.auth.database }}, user {{ .Values.postgres.auth.username }}
+             password: Secret "{{ include "drawguess.postgres.secretName" . }}", key "password"
+{{- end }}
+
+Volumes (PVCs) and the generated PostgreSQL Secret are kept on `helm uninstall`,
+so a reinstall finds the same data and password. Delete both by hand to start over:
+  kubectl -n {{ .Release.Namespace }} delete pvc -l app.kubernetes.io/instance={{ .Release.Name }}
+  kubectl -n {{ .Release.Namespace }} delete secret {{ include "drawguess.postgres.fullname" . }}

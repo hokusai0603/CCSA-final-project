@@ -7,7 +7,7 @@ How to pick work (people and agents): take the first unchecked task **in your la
 Cross-cutting items are tagged inside the tasks that own them:
 
 - **R1–R6** host-environment risks, see `docs/host-environment.md`.
-- **D1–D12** demo pitfalls: designs or defaults that would make a demo scenario fail or mismeasure.
+- **D1–D13** demo pitfalls: designs or defaults that would make a demo scenario fail or mismeasure.
 
 | # | Pitfall | Demo | Owner tasks |
 |---|---|---|---|
@@ -23,6 +23,7 @@ Cross-cutting items are tagged inside the tasks that own them:
 | D10 | A snapshot that crashes workers is reclaimed by the next worker and crashes it too (poison message cascade) | 3 | P1-2, P2-5b |
 | D11 | All clients of dead pods reconnect at once and overload the survivors (thundering herd) | 2, 10 | P1-4 |
 | D12 | ONNX Runtime uses every CPU core by default, so extra AI replicas add no throughput | 5, 6 | P1-3, P2-6b |
+| D13 | `local-path` volumes are tied to one node: draining or losing the node that holds Redis/PostgreSQL leaves them `Pending` and stops the game | 7, 10 | P2-1, P3-4 |
 
 ---
 
@@ -129,9 +130,19 @@ Every service project follows the lint/test convention in `AGENTS.md` §6 (npm `
 
 ## Phase 2 — Kubernetes
 
-- [ ] **P2-1 Helm chart: stateful services** · Owner: C · Needs: —
+- [x] **P2-1 Helm chart: stateful services** · Owner: C · Needs: —
   - Redis and PostgreSQL StatefulSets with PVCs, headless Services, Secret for the DB password.
   - Acceptance: delete the postgres pod; after it restarts, previously written scores are still there.
+  - Done (details in `deploy/helm/drawguess/README.md`):
+    - Redis 8.10.3 with AOF and `noeviction` (≥ 7 for D8); PostgreSQL 18.7 with a `pg_ctl -m fast` preStop; both non-root with read-only root filesystems.
+    - The generated password survives `helm upgrade` (`lookup`) and `helm uninstall` (`resource-policy: keep`), so a reinstall matches the data kept on the PVC.
+    - D13: both pods are pinned to the server node.
+  - Verified on k3d, `drawguess-dev`:
+    - Scores written through the Service with the Secret's password, the pod deleted (clean shutdown in 1.1 s, Ready again 3.0 s later): 3 rows / sum 60 still there.
+    - The same for a Redis key and an `ai:snapshots` entry.
+    - The password is unchanged after `helm upgrade` and after uninstall + reinstall, with the data intact.
+    - `drawguess-prod` installs alongside with its own password and larger PVCs.
+  - Human note: `helm uninstall --wait` returns while the pods are still `Terminating` (and still shown Ready). Before reinstalling, `kubectl wait --for=delete pod -l app.kubernetes.io/instance=drawguess`; otherwise the first commands can hit the old, stopping pod.
 
 - [ ] **P2-2 Helm chart: app services** · Owner: C · Needs: P0-5 (stub image), P2-1
   - Deployments, Services, Ingress (`/` → frontend, `/ws` → game-server), ConfigMap, probes, requests/limits, topology spread, non-root securityContext, `values-dev.yaml` / `values-prod.yaml`. Start with the stub image for every component; switch per component as real images land.
@@ -210,6 +221,7 @@ Every service project follows the lint/test convention in `AGENTS.md` §6 (npm `
   - `scripts/demo-1.sh` … `demo-10.sh` + `make demo-<n>`; each prints the measured numbers. Write each script against the stub first; it must pass with the real services.
   - R4: each script starts with `scripts/preflight.sh --measure` (aborts if other VMs or heavy jobs are running) and prints host load average next to its result; numbers in `goals.md` are the median of ≥ 3 runs, all on the one measurement machine (`docs/team-plan.md`).
   - R2: `make preload` (or equivalent) pulls every image into the nodes ahead of the demo, so live demo 1 works without Docker Hub.
+  - D13: demos 7 and 10 drain or stop **agent** nodes only; Redis and PostgreSQL live on the server node (single point of failure, ADR-004).
   - Acceptance: all 10 scenarios run end-to-end on a fresh cluster.
 
 **IC3 — integration checkpoint:** all 10 demos pass on a fresh cluster on the measurement machine; recording numbers starts.

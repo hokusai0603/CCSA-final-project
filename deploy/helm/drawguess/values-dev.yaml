@@ -1,0 +1,8 @@
+# Development environment (namespace drawguess-dev): small volumes and limits.
+redis:
+  persistence:
+    size: 1Gi
+
+postgres:
+  persistence:
+    size: 1Gi

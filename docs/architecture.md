@@ -86,7 +86,7 @@ All room keys get a TTL (e.g. 2 h) refreshed on activity so abandoned rooms disa
 |---|---|---|
 | Namespace | `drawguess-dev`, `drawguess-prod` | one per environment |
 | Deployment | frontend, game-server, ai-inference | probes, requests/limits, topology spread on zone (`nodeTaintsPolicy: Honor`), non-root securityContext; game-server and ai-inference tolerate `not-ready` / `unreachable` for 15 s, not 300 s |
-| StatefulSet + PVC | redis, postgres | `local-path` StorageClass (k3s default) |
+| StatefulSet + PVC | redis, postgres | `local-path` StorageClass (k3s default); pinned to the server node (node-local volumes, D13); Redis AOF + `noeviction`; PostgreSQL password Secret generated once and kept across upgrade/uninstall |
 | Service | all components | ClusterIP; headless for StatefulSets |
 | Ingress + Traefik Middleware | frontend `/`, game-server `/ws` | rate limit on `/ws` |
 | ConfigMap / Secret | app config / DB password | Secret values come from `values-*.yaml` overrides, never committed |

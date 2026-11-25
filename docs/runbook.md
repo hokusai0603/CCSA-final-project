@@ -47,5 +47,10 @@ Operational procedures. Agents and team members: keep each entry accurate as fea
 2. `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data` (PDBs pace evictions)
 3. Do the maintenance, then `kubectl uncordon <node>`.
 
+## Reinstall the chart / reset stateful data
+- `helm uninstall` keeps the PVCs and the PostgreSQL Secret, so a reinstall finds the same data and password.
+- Wait for the old pods to be gone before reinstalling: `kubectl -n <ns> wait --for=delete pod -l app.kubernetes.io/instance=drawguess`. `helm uninstall --wait` returns while they are still `Terminating`.
+- To start from empty: after uninstall, `kubectl -n <ns> delete pvc -l app.kubernetes.io/instance=drawguess` and `kubectl -n <ns> delete secret drawguess-postgres`.
+
 ## Redis / PostgreSQL pod restarted
 - Data is on PVCs; confirm with `kubectl get pvc -n <ns>`. Game-servers reconnect automatically; rooms in progress resume from Redis.

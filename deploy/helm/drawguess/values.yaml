@@ -1,0 +1,51 @@
+# Defaults shared by every environment. values-dev.yaml / values-prod.yaml override them.
+# Never put real credentials here (AGENTS.md rule 7): the PostgreSQL password is
+# generated once per release and kept in a Secret, or taken from an existing Secret.
+
+global:
+  # storageClassName for every PVC; "" = the cluster default (local-path on k3s).
+  storageClass: ""
+
+# Placement of Redis and PostgreSQL. D13: local-path volumes live on one node, so a
+# pod can never move off it. Pin both to the k3d server node, which demo 7 (drain)
+# and demo 10 (node failure) never touch. Set to {} on a cluster with network storage.
+stateful:
+  nodeSelector:
+    node-role.kubernetes.io/control-plane: "true"
+
+redis:
+  enabled: true
+  # Redis >= 7 is required: KEDA's redis-streams lag trigger (ADR-008, D8).
+  image:
+    repository: redis
+    tag: 8.10.3-alpine3.23
+    pullPolicy: IfNotPresent
+  # AOF persistence so live rooms survive a Redis restart (runbook).
+  appendonly: true
+  appendfsync: everysec
+  # noeviction: a state store must fail writes loudly, never drop keys silently.
+  maxmemory: 200mb
+  maxmemoryPolicy: noeviction
+  persistence:
+    size: 1Gi
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: 18.7-alpine3.24
+    pullPolicy: IfNotPresent
+  auth:
+    database: drawguess
+    username: drawguess
+    # Name of an existing Secret with key "password". Empty = the chart generates a
+    # random password once and keeps it (see templates/postgres-secret.yaml).
+    existingSecret: ""
+  persistence:
+    size: 1Gi
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {cpu: 1000m, memory: 512Mi}
