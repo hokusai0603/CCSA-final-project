@@ -13,6 +13,95 @@ stateful:
   nodeSelector:
     node-role.kubernetes.io/control-plane: "true"
 
+# ---------------------------------------------------------------------------
+# App components (P2-2). Every component starts on the stub image (services/stub);
+# its owner switches `image.repository` to drawguess/<component> when the real
+# image lands (docs/team-plan.md). All app images share one tag: the git SHA that
+# `make build` used, passed by `make deploy` as --set image.tag=... (never "latest").
+image:
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Settings every app Deployment shares.
+app:
+  # D9: evict pods from a NotReady/unreachable node after this long (default 300 s),
+  # so replacements start within about a minute of a node failure (demo 10).
+  nodeFailureTolerationSeconds: 15
+  terminationGracePeriodSeconds: 30
+  # Wait before SIGTERM so the endpoint is removed first (included in the grace period).
+  preStopSleepSeconds: 5
+  # The stub and the real images run as this numeric non-root user.
+  runAsUser: 1000
+  runAsGroup: 1000
+
+# Shared configuration (ConfigMap). Names must match contracts/services.md (P0.5-1).
+# PG* are the libpq variables that node-postgres and psycopg read natively.
+config:
+  LOG_LEVEL: info
+  SNAPSHOT_INTERVAL_MS: "1000"
+
+frontend:
+  enabled: true
+  image:
+    repository: drawguess/stub
+  replicas: 2
+  port: 8080
+  env:
+    COMPONENT: frontend
+  resources:
+    requests: {cpu: 20m, memory: 32Mi}
+    limits: {cpu: 200m, memory: 128Mi}
+
+gameServer:
+  enabled: true
+  image:
+    repository: drawguess/stub
+  # 3 so one zone can be drained with a PDB of 2 (D1; P2-7 adds the PDB, P2-6a the HPA).
+  replicas: 3
+  port: 8080
+  env:
+    COMPONENT: game-server
+  # Connection settings injected from the stateful services: REDIS_URL, PG*.
+  needsRedis: true
+  needsPostgres: true
+  resources:
+    requests: {cpu: 100m, memory: 96Mi}
+    limits: {cpu: 1000m, memory: 256Mi}
+
+aiInference:
+  enabled: true
+  image:
+    repository: drawguess/stub
+  replicas: 2
+  port: 8080
+  env:
+    COMPONENT: ai-inference
+  needsRedis: true
+  needsPostgres: false
+  resources:
+    requests: {cpu: 250m, memory: 256Mi}
+    limits: {cpu: 1000m, memory: 512Mi}
+
+ingress:
+  enabled: true
+  # "" = any host (http://localhost:8080). values-prod.yaml uses prod.localhost so dev
+  # and prod can run side by side on one Traefik.
+  host: ""
+  # D15: give up on an unreachable pod after dialTimeout and retry another one.
+  dialTimeout: 1s
+  retry:
+    attempts: 3
+    initialInterval: 100ms
+  # D2/D14: rate limit on new /ws requests (Traefik RateLimit middleware), per source IP.
+  # Behind k3d's load balancer Traefik sees one IP per k3d node, not per player, so the
+  # effective total is about (number of nodes) x average. Per-player limits belong in the
+  # game-server (per-connection message rate). The load test raises it (P3-3).
+  rateLimit:
+    enabled: true
+    average: 50
+    burst: 100
+
+# ---------------------------------------------------------------------------
 redis:
   enabled: true
   # Redis >= 7 is required: KEDA's redis-streams lag trigger (ADR-008, D8).

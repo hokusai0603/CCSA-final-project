@@ -1,0 +1,87 @@
+{{- if .Values.ingress.enabled }}
+{{- $fullname := include "drawguess.fullname" . }}
+{{- $rl := .Values.ingress.rateLimit }}
+{{- $mw := printf "%s-%s" .Release.Namespace $fullname }}
+{{- $wsMiddlewares := list (printf "%s-retry@kubernetescrd" $mw) }}
+{{- if $rl.enabled }}{{ $wsMiddlewares = prepend $wsMiddlewares (printf "%s-ws-ratelimit@kubernetescrd" $mw) }}{{ end }}
+# "/" -> frontend
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "drawguess.labels" (dict "ctx" $ "component" "ingress") | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: {{ printf "%s-retry@kubernetescrd" $mw }}
+spec:
+  ingressClassName: traefik
+  rules:
+    - {{- with .Values.ingress.host }}
+      host: {{ . | quote }}
+      {{- end }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: {{ $fullname }}-frontend, port: {name: http}}
+---
+# "/ws" -> game-server, in its own Ingress so only WebSocket traffic gets the rate limit.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}-ws
+  labels:
+    {{- include "drawguess.labels" (dict "ctx" $ "component" "ingress") | nindent 4 }}
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: {{ join "," $wsMiddlewares }}
+spec:
+  ingressClassName: traefik
+  rules:
+    - {{- with .Values.ingress.host }}
+      host: {{ . | quote }}
+      {{- end }}
+      http:
+        paths:
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service: {name: {{ $fullname }}-game-server, port: {name: http}}
+---
+# D15: after a node dies its pods stay in the endpoints for ~40 s. Dial them with a short
+# timeout and retry another pod, instead of hanging on the default 30 s dial timeout.
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: {{ $fullname }}-transport
+  labels:
+    {{- include "drawguess.labels" (dict "ctx" $ "component" "ingress") | nindent 4 }}
+spec:
+  forwardingTimeouts:
+    dialTimeout: {{ .Values.ingress.dialTimeout }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $fullname }}-retry
+  labels:
+    {{- include "drawguess.labels" (dict "ctx" $ "component" "ingress") | nindent 4 }}
+spec:
+  retry:
+    attempts: {{ .Values.ingress.retry.attempts }}
+    initialInterval: {{ .Values.ingress.retry.initialInterval }}
+{{- if $rl.enabled }}
+---
+# D2: Traefik rate limit for new /ws requests (connection attempts), by source IP.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ $fullname }}-ws-ratelimit
+  labels:
+    {{- include "drawguess.labels" (dict "ctx" $ "component" "ingress") | nindent 4 }}
+spec:
+  rateLimit:
+    average: {{ $rl.average }}
+    burst: {{ $rl.burst }}
+{{- end }}
+{{- end }}

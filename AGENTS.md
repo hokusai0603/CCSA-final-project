@@ -69,7 +69,7 @@ These rules exist because the demo scenarios depend on them.
 3. **Graceful shutdown on SIGTERM**: stop accepting new connections, tell connected clients to reconnect (`{"type":"reconnect"}`), finish in-flight work, exit before `terminationGracePeriodSeconds` (30s).
 4. **The game must keep working when the AI is completely down.** Drawing and chat continue; the round timer pauses; the UI shows "AI is busy — timer paused". See `docs/architecture.md` §6.
 5. **AI requests are coalesced**: at most one pending snapshot per room; stale snapshots are dropped.
-6. **Containers**: multi-stage Dockerfiles, run as non-root, no secrets baked in, image tag = short git SHA (never `latest` in the chart).
+6. **Containers**: multi-stage Dockerfiles, run as non-root, no secrets baked in, image tag = short git SHA (never `latest` in the chart). The chart runs every app pod as **uid/gid 1000** with a **read-only root filesystem** (only `/tmp` is writable) and expects the service on port **8080**; `make build` builds every `services/<name>/Dockerfile` as `drawguess/<name>:<tag>`.
 7. **Configuration** via environment variables sourced from ConfigMap/Secret. Never commit real secrets; commit only `*.example` files.
 8. **Every Deployment** sets resource `requests` and `limits`, liveness/readiness probes, and `topologySpreadConstraints` on `topology.kubernetes.io/zone`.
 9. **Structured JSON logs** to stdout (one object per line, include `room` and `pod` fields where relevant).

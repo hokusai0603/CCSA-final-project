@@ -47,6 +47,14 @@ Operational procedures. Agents and team members: keep each entry accurate as fea
 2. `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data` (PDBs pace evictions)
 3. Do the maintenance, then `kubectl uncordon <node>`.
 
+## Deploy or update
+- `make build deploy ENV=dev` (or `ENV=prod`, served at `http://prod.localhost:8080`). The image tag is the git SHA, or `<sha>-dirty-<hash>` when `services/` has uncommitted changes; chart-only edits keep the tag.
+- `deploy` fails with "not built for this tree" when `services/` changed since the last build: run `make build` first.
+- Never `kubectl edit/patch` an object Helm manages: `helm upgrade` leaves the drift in place when the chart did not change. Delete the object and `make deploy` again.
+
+## Rebalance after a drain or a node coming back
+- Kubernetes does not move running pods back. Check: `kubectl -n <ns> get pods -o wide`. Fix: `kubectl -n <ns> rollout restart deploy`. Verify: each Deployment spread over its zones again.
+
 ## Reinstall the chart / reset stateful data
 - `helm uninstall` keeps the PVCs and the PostgreSQL Secret, so a reinstall finds the same data and password.
 - Wait for the old pods to be gone before reinstalling: `kubectl -n <ns> wait --for=delete pod -l app.kubernetes.io/instance=drawguess`. `helm uninstall --wait` returns while they are still `Terminating`.

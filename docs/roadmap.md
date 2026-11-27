@@ -7,7 +7,7 @@ How to pick work (people and agents): take the first unchecked task **in your la
 Cross-cutting items are tagged inside the tasks that own them:
 
 - **R1–R6** host-environment risks, see `docs/host-environment.md`.
-- **D1–D13** demo pitfalls: designs or defaults that would make a demo scenario fail or mismeasure.
+- **D1–D15** demo pitfalls: designs or defaults that would make a demo scenario fail or mismeasure.
 
 | # | Pitfall | Demo | Owner tasks |
 |---|---|---|---|
@@ -24,6 +24,8 @@ Cross-cutting items are tagged inside the tasks that own them:
 | D11 | All clients of dead pods reconnect at once and overload the survivors (thundering herd) | 2, 10 | P1-4 |
 | D12 | ONNX Runtime uses every CPU core by default, so extra AI replicas add no throughput | 5, 6 | P1-3, P2-6b |
 | D13 | `local-path` volumes are tied to one node: draining or losing the node that holds Redis/PostgreSQL leaves them `Pending` and stops the game | 7, 10 | P2-1, P3-4 |
+| D14 | Behind k3d's load balancer Traefik sees one source IP per k3d node, not per player: a per-IP rate limit is really a shared limit of about nodes × average | 5 | P2-2, P1-2, P3-3 |
+| D15 | For ~45 s after a node dies its pods stay in the endpoints, and k3d's load balancer still routes some connections through the dead node: new connections hang, and some open WebSockets go silent without a close event | 10, 2 | P2-2, P1-2, P1-4 |
 
 ---
 
@@ -72,7 +74,7 @@ After this phase nobody waits for another lane: every lane develops against the 
     - `ws-protocol.schema.json`: every client→server and server→client message, including the stroke `cid` (D5);
     - `ai-stream.schema.json`: the `ai:snapshots` entry `{room, round, seq}` and the `ai_guess` payload;
     - `model.md`: the ONNX input/output contract (input name, shape `[1,1,28,28]` float32, normalization, output = 50 scores in `categories.txt` order);
-    - `services.md`: per service, the env vars, port, `/healthz` `/readyz` `/metrics` behaviour and metric names;
+    - `services.md`: per service, the env vars, port, `/healthz` `/readyz` `/metrics` behaviour and metric names. Start from what the chart already injects (P2-2): `PORT` (8080), `VERSION`, `POD_NAME`, `COMPONENT`, `LOG_LEVEL`, `SNAPSHOT_INTERVAL_MS`, `REDIS_URL`, and libpq's `PGHOST` `PGPORT` `PGDATABASE` `PGUSER` `PGPASSWORD`. Pods run as uid 1000 with a read-only root filesystem (only `/tmp` writable);
     - `fixtures/*.jsonl`: example sessions (join, strokes, reconnect with `lastSeq`, `ai_guess`, `ai_status`, `round_end`).
   - Rule: changing anything in `contracts/` needs the other two lanes' approval (`docs/team-plan.md`).
   - Acceptance: `make lint` validates every fixture against its schema and fails on an invalid one.
@@ -107,6 +109,8 @@ Every service project follows the lint/test convention in `AGENTS.md` §6 (npm `
   - R3: default local config uses Redis `16379` / PostgreSQL `15432` (never 6379/5432); test helpers use a unique key prefix and refuse to run against a non-empty Redis/database they did not create.
   - Demo pitfall (D10): cap strokes per round and points per stroke (reject beyond the cap), so no snapshot can grow without bound and crash the AI.
   - Lesson from the stub (P0-5): keep CPU-heavy work off the event loop, or probes fail under load.
+  - Demo pitfall (D14): rate-limit **per connection** (strokes and chat per second, oversized messages) in the server; Traefik cannot tell players apart on k3d.
+  - Demo pitfall (D15): send an application-level heartbeat (e.g. `{"type":"ping"}` every 2 s, part of the contract) so clients can detect a dead path; a dead node does not always close the socket.
   - Acceptance: unit tests for room logic and protocol validation; contract tests pass; two `wscat` clients in one room see each other's strokes.
 
 - [ ] **P1-3 AI worker** · Owner: B · Needs: P0.5-1, P0.5-4
@@ -119,6 +123,7 @@ Every service project follows the lint/test convention in `AGENTS.md` §6 (npm `
   - Canvas drawing (mouse + touch), join by URL `?room=`, live strokes, AI guesses panel, timer, scores, banner for `ai_status`. Develop against the mock WebSocket server; switch to the real game-server at IC1.
   - Demo pitfall (D5, "0 lost strokes"): `lastSeq` replay only restores strokes the server already has. Strokes the player draws **while disconnected** must be queued in the client and resent after reconnect, each with a client stroke id `cid` so the server can drop duplicates (P2-3).
   - Demo pitfall (D11): reconnect with exponential backoff plus random jitter (e.g. 250 ms base, ×2, cap 5 s, ±50 %), so the clients of a dead pod do not all hit the survivors in the same instant.
+  - Demo pitfall (D15): treat ~5 s without any server message (heartbeat) as a dead connection and reconnect; give each connection attempt a ~3 s timeout. On k3d, 2 of 9 open sockets stayed silently open for 77 s after a node stop.
   - Acceptance: two browsers draw together; AI guesses appear; correct guess ends the round; after the mock's `reconnect`, strokes drawn while disconnected appear once.
 
 - [ ] **P1-5 Docker images & Compose** · Owner: C (compose, review) · each service owner writes their Dockerfile · Needs: P0-5
@@ -144,7 +149,7 @@ Every service project follows the lint/test convention in `AGENTS.md` §6 (npm `
     - `drawguess-prod` installs alongside with its own password and larger PVCs.
   - Human note: `helm uninstall --wait` returns while the pods are still `Terminating` (and still shown Ready). Before reinstalling, `kubectl wait --for=delete pod -l app.kubernetes.io/instance=drawguess`; otherwise the first commands can hit the old, stopping pod.
 
-- [ ] **P2-2 Helm chart: app services** · Owner: C · Needs: P0-5 (stub image), P2-1
+- [x] **P2-2 Helm chart: app services** · Owner: C · Needs: P0-5 (stub image), P2-1
   - Deployments, Services, Ingress (`/` → frontend, `/ws` → game-server), ConfigMap, probes, requests/limits, topology spread, non-root securityContext, `values-dev.yaml` / `values-prod.yaml`. Start with the stub image for every component; switch per component as real images land.
   - Demo pitfall (D1, demo 7): topology spread constraints set `nodeTaintsPolicy: Honor`. Otherwise a cordoned node's zone still counts as a domain with 0 pods, and with `DoNotSchedule` the evicted pod stays `Pending`.
   - Demo pitfall (D2, demo 5): the `/ws` rate limit is a values setting (`ingress.rateLimit`), so the load test can raise it (P3-3).
@@ -152,7 +157,21 @@ Every service project follows the lint/test convention in `AGENTS.md` §6 (npm `
   - Lessons from the stub on k3d (P0-5):
     - A Node service that blocks its event loop under load (synchronous CPU work) fails its probes: pods turn unready (503 at the Ingress) and liveness restarts them. Keep CPU work off the main thread. Give liveness `timeoutSeconds` ≥ 2 and `failureThreshold` ≥ 3, so load alone does not restart pods.
     - Traefik starts routing to a newly Ready pod a few seconds after `rollout status` returns. Count that lag in G2's "pod Ready" vs "players back" numbers.
-  - Acceptance: `make build deploy ENV=dev` on a fresh cluster → all pods Ready, game playable through the Ingress; pods of each Deployment are spread across ≥ 2 zones.
+  - Acceptance: `make build deploy ENV=dev` on a fresh cluster → all pods Ready; through the Ingress `/` reaches the frontend and `/ws` the game-server; pods of each Deployment are spread across ≥ 2 zones. (Under the parallel plan the components are still stubs; "game playable through the Ingress" is checked at IC2 with the real images.)
+  - Done (details in `deploy/helm/drawguess/README.md`):
+    - `make build` / `make deploy ENV=…`; one image tag for all components, computed from `services/` so chart-only edits keep it. Deploy checks every `drawguess/*` image exists and re-imports any missing from the nodes.
+    - Deployments with the shared ConfigMap, `REDIS_URL` / `PG*` injection, probes, `preStop` sleep 5 s, D9 tolerations 15 s, and zone spread with `nodeTaintsPolicy: Honor` plus `matchLabelKeys: [pod-template-hash]`.
+    - Two Ingresses (`/`, `/ws`) with a Traefik retry middleware and a 1 s dial timeout (D15), plus the `/ws` rate limit (D2/D14). Prod uses host `prod.localhost`, so dev and prod coexist.
+  - Verified on k3d (stub images):
+    - Fresh `make cluster-up build deploy ENV=dev` in 50 s, all pods Ready, no app pod on the server node; game-server in 3 zones, the others in 2.
+    - `/` → frontend, `/ws` → game-server (12/12 sessions).
+    - Drain of zone-a: done in 3 s, nothing Pending (D1).
+    - Node stop: NotReady after ~45 s, replacements Ready at ~62 s (D9; the default would be ~340 s).
+    - Rolling update under load: 243,762 HTTP requests and 2,692 new WebSocket sessions, **0 failures** (before `preStop`: 70 WebSocket 503s).
+    - Node stop with the D15 fixes: 28 of 30 new sessions succeeded (2 timed out because k3d's LB still routed through the dead node).
+  - Human notes:
+    - Never `kubectl edit/patch` a Helm-managed object: `helm upgrade` does not revert the drift if the chart did not change. Delete the object and `make deploy`.
+    - Kubernetes does not move pods back after a drain or a node returns; rebalance with `kubectl rollout restart` before the next demo.
 
 - [ ] **P2-3 Multi-replica correctness** · Owner: A · Needs: P1-2
   - Redis Pub/Sub fan-out between pods; room owner lease (§2); reconnect with `lastSeq` replay.
@@ -160,7 +179,7 @@ Every service project follows the lint/test convention in `AGENTS.md` §6 (npm `
   - Acceptance: with 3 game-server replicas, players forced onto different pods see each other's strokes; deleting the room-owner pod hands the timer to another pod within 3 s; strokes drawn during a forced disconnect appear **exactly once** for every player.
 
 - [ ] **P2-4 Graceful shutdown** · Owner: A · Needs: P1-2
-  - SIGTERM handling per `AGENTS.md` rule 3; `preStop` hook if needed; `terminationGracePeriodSeconds: 30`; `maxUnavailable: 0`.
+  - SIGTERM handling per `AGENTS.md` rule 3; `terminationGracePeriodSeconds: 30`; `maxUnavailable: 0`. The chart already adds a `preStop` sleep of 5 s (P2-2), so by the time SIGTERM arrives Traefik has stopped sending new connections; the server then sends `reconnect` to its clients and finishes in-flight work within the remaining ~25 s.
   - Demo pitfall (D6): a pod cannot count its own death, and its counter disappears with it. `drawguess_rounds_interrupted_total` must be incremented by a **surviving** pod: e.g. the pod that takes over a room's owner lease and finds the timer stalled longer than lease timeout + 2 s, or the round state lost. Demo 4 also checks it from the client side: every `round_start` seen by the probe client has a matching `round_end`.
   - Acceptance: demo scenario 4 passes — rolling update during play leaves `drawguess_rounds_interrupted_total` unchanged; **negative test**: scaling game-server to 0 for 10 s mid-round increases it (proves the metric can see an interruption).
 
@@ -214,6 +233,7 @@ Every service project follows the lint/test convention in `AGENTS.md` §6 (npm `
 - [ ] **P3-3 Load test** · Owner: C · Needs: P0.5-2 (mock), later P2-2 with the real game-server
   - k6 script in `loadtest/` that joins rooms of 4–6 virtual players who send strokes at a realistic rate. Develop against the mock WebSocket server.
   - Demo pitfall (D2): all virtual players come from one source IP, so the per-IP `/ws` rate limit throttles the load test instead of the app being measured. Run with a load-test values override that raises the limit (and say so in the results).
+  - D14: the limit applies per k3d node, so the total allowed connection rate is about (number of nodes) × `ingress.rateLimit.average`; size the override from k6's connection-open rate (an unpaced loop hit the limit at ~500 opens/s).
   - k6 runs on the same host as the cluster (R4): record its CPU use and run `make preflight-measure` first.
   - Acceptance: demo scenario 5 passes; k6 summary saved to `loadtest/results/` shows 0 failed WebSocket connects and 0 HTTP 429.
 
@@ -222,6 +242,7 @@ Every service project follows the lint/test convention in `AGENTS.md` §6 (npm `
   - R4: each script starts with `scripts/preflight.sh --measure` (aborts if other VMs or heavy jobs are running) and prints host load average next to its result; numbers in `goals.md` are the median of ≥ 3 runs, all on the one measurement machine (`docs/team-plan.md`).
   - R2: `make preload` (or equivalent) pulls every image into the nodes ahead of the demo, so live demo 1 works without Docker Hub.
   - D13: demos 7 and 10 drain or stop **agent** nodes only; Redis and PostgreSQL live on the server node (single point of failure, ADR-004).
+  - Demo 10 on k3d: while a node is down, k3d's load balancer retries it every 10 s (`fail_timeout`), so an occasional new connection takes ~2 s; a cloud load balancer's health check would not. Say so when presenting the numbers.
   - Acceptance: all 10 scenarios run end-to-end on a fresh cluster.
 
 **IC3 — integration checkpoint:** all 10 demos pass on a fresh cluster on the measurement machine; recording numbers starts.

@@ -48,10 +48,11 @@ if [[ -f $chart/Chart.yaml ]]; then
   shopt -s nullglob
   values=("$chart"/values-*.yaml)
   shopt -u nullglob
-  hc lint "$chart"
+  # image.tag is required (make deploy passes the git SHA); any value renders the chart.
+  hc lint "$chart" --set image.tag=lint
   for v in "${values[@]}"; do
-    hc lint "$chart" -f "$v"
-    hc template drawguess "$chart" -f "$v" >/dev/null
+    hc lint "$chart" -f "$v" --set image.tag=lint
+    hc template drawguess "$chart" -f "$v" --set image.tag=lint >/dev/null
     ok "helm lint + template with $v"
   done
 else

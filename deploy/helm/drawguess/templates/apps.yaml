@@ -1,0 +1,5 @@
+{{ include "drawguess.app" (dict "ctx" $ "key" "frontend" "name" "frontend") }}
+---
+{{ include "drawguess.app" (dict "ctx" $ "key" "gameServer" "name" "game-server") }}
+---
+{{ include "drawguess.app" (dict "ctx" $ "key" "aiInference" "name" "ai-inference") }}

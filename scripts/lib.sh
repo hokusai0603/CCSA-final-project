@@ -64,4 +64,21 @@ hc() { command helm --kube-context "$KUBE_CONTEXT" "$@"; }
 # Short git SHA used as the image tag (never `latest`, AGENTS.md rule 6).
 git_sha() { git -C "$REPO_ROOT" rev-parse --short HEAD; }
 
+# Image tag for the given repo paths (default: the whole repo): the short SHA, or
+# "<sha>-dirty-<content hash>" if those paths have uncommitted changes. The hash makes
+# every edit produce a new tag; reusing one "-dirty" tag would leave k3d nodes on the
+# image imported first (same tag, so IfNotPresent never replaces it).
+image_tag() {
+  local paths=("$@") sha content
+  ((${#paths[@]})) || paths=(.)
+  sha=$(git_sha)
+  if [[ -z $(git -C "$REPO_ROOT" status --porcelain -- "${paths[@]}") ]]; then
+    echo "$sha"
+    return
+  fi
+  content=$(cd "$REPO_ROOT" && find "${paths[@]}" -type f -not -path '*/node_modules/*' -not -path '*/.git/*' \
+    -not -path '*/.venv/*' -not -path '*/__pycache__/*' -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -c1-8)
+  echo "${sha}-dirty-${content}"
+}
+
 require_non_root

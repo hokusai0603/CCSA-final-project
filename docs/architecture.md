@@ -85,11 +85,11 @@ All room keys get a TTL (e.g. 2 h) refreshed on activity so abandoned rooms disa
 | Resource | For | Key settings |
 |---|---|---|
 | Namespace | `drawguess-dev`, `drawguess-prod` | one per environment |
-| Deployment | frontend, game-server, ai-inference | probes, requests/limits, topology spread on zone (`nodeTaintsPolicy: Honor`), non-root securityContext; game-server and ai-inference tolerate `not-ready` / `unreachable` for 15 s, not 300 s |
+| Deployment | frontend, game-server, ai-inference | probes, requests/limits, topology spread on zone (`nodeTaintsPolicy: Honor`, `matchLabelKeys: [pod-template-hash]`), uid 1000 with read-only root filesystem (`/tmp` writable), `preStop` sleep 5 s, `maxUnavailable: 0`; tolerate `not-ready` / `unreachable` for 15 s, not 300 s |
 | StatefulSet + PVC | redis, postgres | `local-path` StorageClass (k3s default); pinned to the server node (node-local volumes, D13); Redis AOF + `noeviction`; PostgreSQL password Secret generated once and kept across upgrade/uninstall |
 | Service | all components | ClusterIP; headless for StatefulSets |
-| Ingress + Traefik Middleware | frontend `/`, game-server `/ws` | rate limit on `/ws` |
-| ConfigMap / Secret | app config / DB password | Secret values come from `values-*.yaml` overrides, never committed |
+| Ingress + Traefik Middleware | frontend `/`, game-server `/ws` | retry middleware and a `ServersTransport` with a 1 s dial timeout on both (D15); rate limit on `/ws` (per k3d node, D14); dev on any host, prod on `prod.localhost` |
+| ConfigMap / Secret | app config / DB password | ConfigMap `drawguess-config` (`LOG_LEVEL`, `SNAPSHOT_INTERVAL_MS`, …) via `envFrom`; the chart also injects `PORT`, `VERSION`, `POD_NAME`, `COMPONENT`, `REDIS_URL` and libpq `PG*` (password from the generated Secret) |
 | HPA | game-server | CPU 60 % baseline; stretch: custom metric `ws_connections` via prometheus-adapter |
 | KEDA ScaledObject | ai-inference | two triggers, highest wins (ADR-008): active rooms → `ceil(rooms / R) + 1`; `redis-streams` lag on `ai:snapshots` / group `ai-workers` → `ceil(lag / 5)` (not `pendingEntriesCount`); `pollingInterval` 5 s; `minReplicaCount` 2 (`play`) or 0 (`idle`); `maxReplicaCount` 6 |
 | PodDisruptionBudget | game-server (`minAvailable: 2`), ai-inference (`minAvailable: 1`), frontend (`minAvailable: 1`) | |

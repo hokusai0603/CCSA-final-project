@@ -3,11 +3,27 @@
 Contains every app component plus Redis and PostgreSQL. Resource list and key settings: `docs/architecture.md` §7. Values files: `values.yaml` (defaults), `values-dev.yaml`, `values-prod.yaml`. Tasks: P2-1 … P2-7.
 
 ```bash
-helm --kube-context k3d-drawguess upgrade --install drawguess deploy/helm/drawguess \
-  -n drawguess-dev --create-namespace -f deploy/helm/drawguess/values-dev.yaml --wait
+make build deploy ENV=dev     # namespace drawguess-dev,  http://localhost:8080
+make build deploy ENV=prod    # namespace drawguess-prod, http://prod.localhost:8080
 ```
 
-(`make deploy ENV=dev` wraps this from P2-2 on.)
+`make deploy` runs `helm upgrade --install` with `values-<env>.yaml` and `--set image.tag=<tag>` (the tag `make build` used; `image.tag` is required).
+
+## App services (P2-2)
+
+`frontend`, `game-server`, `ai-inference`: one Deployment + ClusterIP Service each (`drawguess-<component>`, port 80 → 8080), all on `drawguess/stub` until their owner switches `<component>.image.repository` to `drawguess/<component>`.
+
+| Setting | Value | Why |
+|---|---|---|
+| Replicas | frontend 2, game-server 3, ai-inference 2 | game-server 3 for D1 (HPA/PDB come in P2-6a/P2-7) |
+| Env | ConfigMap `drawguess-config` + `PORT`, `VERSION` (= image tag), `POD_NAME`, `COMPONENT`; `REDIS_URL` (game-server, ai-inference); libpq `PG*` incl. `PGPASSWORD` from the Secret (game-server) | names to be fixed in `contracts/services.md` |
+| Security | uid/gid 1000, `runAsNonRoot`, read-only root filesystem (`/tmp` emptyDir), all capabilities dropped, no service-account token | AGENTS.md rules 6, 8 |
+| Probes | startup + liveness `/healthz` (liveness 10 s period, 2 s timeout, 3 failures), readiness `/readyz` | load alone must not restart a pod (P0-5 lesson) |
+| Rollout | `maxUnavailable: 0`, `maxSurge: 1`, `preStop` sleep 5 s, grace 30 s | 0 failures in a rolling update under load |
+| Spread | zone, `maxSkew: 1`, `DoNotSchedule`, `nodeTaintsPolicy: Honor`, `matchLabelKeys: [pod-template-hash]` | D1; without `matchLabelKeys` a rollout left 2 of 3 game-servers on one node |
+| Node failure | tolerate `not-ready` / `unreachable` for `app.nodeFailureTolerationSeconds` (15) | D9: replacements in ~60 s instead of ~340 s |
+
+Ingress (Traefik): `drawguess` (`/` → frontend) and `drawguess-ws` (`/ws` → game-server). Both use the `drawguess-retry` middleware and the `drawguess-transport` ServersTransport (`dialTimeout: 1s`), so a dead pod costs a connection about one second instead of hanging (D15). `/ws` also has `drawguess-ws-ratelimit`. Traefik sees one source IP per k3d node (D14), so the limit is shared by everyone behind that node. Dev answers on any host; prod on `prod.localhost`.
 
 ## Stateful services (P2-1)
 
